@@ -1,18 +1,41 @@
 import os
 import logging
 from flask import Flask
-from flask_mail import Mail
+from flask_mail import Mail, Message
+
 from werkzeug.middleware.proxy_fix import ProxyFix
 from flask_session import Session
 from .lib import utils
-
+from flask import Flask, jsonify
+from flask_swagger_ui import get_swaggerui_blueprint
+import yaml
+from flask_cors import CORS
 
 def create_app(config=None):
     from powerdnsadmin.lib.settings import AppSettings
     from . import models, routes, services
     from .assets import assets
     app = Flask(__name__)
+    CORS(app)
+    SWAGGER_URL = '/swagger'  
+    API_URL = '/swagger.yaml'
+    with open('/opt/web/powerdns-admin/powerdnsadmin/swagger-spec.yaml', 'r') as yaml_file:
+        swagger_spec = yaml.safe_load(yaml_file)
+    swaggerui_blueprint = get_swaggerui_blueprint(
+        SWAGGER_URL,
+        API_URL,
+        config={  # Tùy chỉnh thêm nếu cần
+            'app_name': "Sample Flask API"
+        }
+    )
+    
+    # Đăng ký blueprint của Swagger UI vào Flask app
+    app.register_blueprint(swaggerui_blueprint, url_prefix=SWAGGER_URL)
 
+    # Định nghĩa route trả về tài liệu Swagger từ file YAML
+    
+    # Tạo blueprint cho Swagger UI
+      # Đường dẫn của file Swagger (OpenAPI) spec
     # Read log level from environment variable
     log_level_name = os.environ.get('PDNS_ADMIN_LOG_LEVEL', 'WARNING')
     log_level = logging.getLevelName(log_level_name.upper())
@@ -99,5 +122,7 @@ def create_app(config=None):
     def inject_setting():
         setting = Setting()
         return dict(SETTING=setting)
-
+    @app.route('/swagger.yaml')
+    def swagger_yaml():
+        return jsonify(swagger_spec)
     return app
