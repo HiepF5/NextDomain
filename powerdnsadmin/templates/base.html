@@ -211,6 +211,23 @@
                             </ul>
                         </li>
                     {% endif %}
+                    {% if current_user.role.name in ['User'] %}
+                    <li class="{{ 'nav-item active' if active_page == 'admin_keys' else 'nav-item' }}">
+                        <a href="{{ url_for('user.user_manage_keys') }}" class="nav-link">
+                            <i class="nav-icon fa-solid fa-key"></i>
+                            <p>API Keys</p>
+                        </a>
+                    </li>
+                    {% endif %}
+                    {% if current_user.role.name in ['User'] %}
+                    <li class="{{ 'nav-item active' if active_page == 'admin_keys' else 'nav-item' }}">
+                        <a href="{{ url_for('user.user_guide') }}" class="nav-link">
+                            <i class="nav-icon fa-solid fa-key"></i>
+                            <p>Hướng Dẫn</p>
+                        </a>
+                    </li>
+                    {% endif %}
+                   
                 </ul>
             {% endif %}
         </div>

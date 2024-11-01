@@ -6,9 +6,14 @@ import mimetypes
 from flask import Blueprint, request, render_template, make_response, jsonify, redirect, url_for, g, session, \
     current_app, after_this_request, abort
 from flask_login import current_user, login_required, login_manager
-
+from ..decorators import user_create_domain
 from ..models.user import User, Anonymous
 from ..models.setting import Setting
+from ..models.api_key import ApiKey
+from ..models.history import History
+from ..models.account_user import AccountUser
+from ..models.base import db
+from ..models.account import Account
 from .index import password_policy_check
 
 
@@ -106,8 +111,63 @@ def profile():
         user.update_profile()
 
         return render_template('user_profile.html')
+    
+@user_bp.route('/user-manage-keys', methods=['GET', 'POST'])
+@login_required
+@user_create_domain
+def user_manage_keys():
+    if request.method == 'GET':
+        try:
+            apikeys = db.session.query(ApiKey) \
+                .join(ApiKey.accounts) \
+                .filter(Account.id == current_user.id) \
+                .all()
 
+        except Exception as e:
+            current_app.logger.error('Error: {0}'.format(e))
+            abort(500)
 
+        return render_template('user_manage_keys.html',
+                               keys=apikeys)
+
+    elif request.method == 'POST':
+        jdata = request.json
+        if jdata['action'] == 'delete_key':
+
+            apikey = ApiKey.query.get(jdata['data'])
+            try:
+                history_apikey_id = apikey.id
+                history_apikey_role = apikey.role.name
+                history_apikey_description = apikey.description
+                history_apikey_domains = [domain.name for domain in apikey.domains]
+
+                apikey.delete()
+            except Exception as e:
+                current_app.logger.error('Error: {0}'.format(e))
+
+            current_app.logger.info('Delete API key {0}'.format(apikey.id))
+            history = History(msg='Delete API key {0}'.format(apikey.id),
+                              detail=json.dumps({
+                                  'key': history_apikey_id,
+                                  'role': history_apikey_role,
+                                  'description': history_apikey_description,
+                                  'domains': history_apikey_domains
+                              }),
+                              created_by=current_user.username)
+            history.add()
+
+            return make_response(
+                jsonify({
+                    'status': 'ok',
+                    'msg': 'Key has been removed.'
+                }), 200)
+
+@user_bp.route('/user-guide', methods=['GET', 'POST'])
+@login_required
+@user_create_domain
+def user_guide():
+    return render_template('user_guide.html')
+               
 @user_bp.route('/qrcode')
 @login_required
 def qrcode():

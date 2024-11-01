@@ -467,7 +467,7 @@ def user_add():
     templates = DomainTemplate.query.all()
     domain_override_toggle = True
     accounts = current_user.get_accounts()
-    return render_template('users_domain_add.html',
+    return render_template('user_domain_add.html',
                             templates=templates,
                             accounts=accounts,
                             domain_override_toggle=domain_override_toggle)
@@ -478,7 +478,7 @@ def language():
     templates = DomainTemplate.query.all()
     domain_override_toggle = True
     accounts = current_user.get_accounts()
-    return render_template('users_domain_add.html',
+    return render_template('user_domain_add.html',
                             templates=templates,
                             accounts=accounts,
                             domain_override_toggle=domain_override_toggle)

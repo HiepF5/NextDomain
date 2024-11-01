@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% set active_page = "guide" %}
+{% block title %}<title>Hướng dẫn Sử dụng PowerDNS - {{ SITE_NAME }}</title>{% endblock %}
+
+{% block dashboard_stat %}
+<div class="content-header">
+    <div class="container-fluid">
+        <div class="row mb-2">
+            <div class="col-sm-6">
+                <h1 class="m-0 text-dark">
+                    Hướng dẫn Sử dụng PowerDNS
+                </h1>
+            </div>
+            <div class="col-sm-6">
+                <ol class="breadcrumb float-sm-right">
+                    <li class="breadcrumb-item"><a href="{{ url_for('dashboard.dashboard') }}">Trang chính</a></li>
+                    <li class="breadcrumb-item active">Hướng dẫn</li>
+                </ol>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<section class="content">
+    <div class="container-fluid">
+        <div class="row">
+            <div class="col-12">
+                <div class="card card-outline card-secondary shadow">
+                    <div class="card-header">
+                        <h3 class="card-title">Hướng dẫn Cơ bản về PowerDNS</h3>
+                    </div>
+                    <div class="card-body">
+                        <h4>Giới thiệu</h4>
+                        <p>PowerDNS là một máy chủ DNS mạnh mẽ và linh hoạt, hỗ trợ nhiều tính năng như quản lý vùng
+                            DNS, giao thức REST API, và nhiều hơn nữa. PowerDNS Admin là giao diện quản lý giúp bạn dễ
+                            dàng thao tác với các vùng DNS của mình.</p>
+
+                        <h4>Cách thêm một vùng mới</h4>
+                        <ol>
+                            <li>Truy cập trang quản lý PowerDNS Admin.</li>
+                            <li>Nhấp vào nút <strong>Tạo vùng mới</strong>.</li>
+                            <li>Nhập thông tin cho vùng:
+                                <ul>
+                                    <li><strong>Tên vùng:</strong> Nhập tên vùng theo định dạng <em>name.tld</em> (ví
+                                        dụ: <em>example.com</em>).</li>
+                                    <li><strong>Loại vùng:</strong> Chọn loại vùng (Chính, Phụ, hoặc Bản địa).</li>
+                                    <li><strong>Tài khoản:</strong> Chọn tài khoản liên quan đến vùng.</li>
+                                </ul>
+                            </li>
+                            <li>Nhấn nút <strong>Lưu</strong> để hoàn tất.</li>
+                        </ol>
+
+                        <h4>Quản lý bản ghi</h4>
+                        <p>Bạn có thể quản lý các bản ghi DNS trong vùng bằng cách chọn vùng và sau đó thêm, sửa đổi
+                            hoặc xóa các bản ghi. Các loại bản ghi phổ biến bao gồm:</p>
+                        <ul>
+                            <li><strong>A Record:</strong> ánh xạ tên miền đến địa chỉ IPv4.</li>
+                            <li><strong>AAAA Record:</strong> ánh xạ tên miền đến địa chỉ IPv6.</li>
+                            <li><strong>CNAME Record:</strong> tạo bí danh cho một tên miền khác.</li>
+                            <li><strong>MX Record:</strong> chỉ định máy chủ nhận email cho miền.</li>
+                        </ul>
+
+                        <h4>Khôi phục và xóa vùng</h4>
+                        <p>Bạn có thể khôi phục hoặc xóa vùng DNS bằng cách chọn vùng và sử dụng các tùy chọn tương ứng.
+                            Lưu ý rằng việc xóa vùng là không thể khôi phục, vì vậy hãy chắc chắn trước khi thực hiện
+                            thao tác này.</p>
+
+                        <h4>Tài liệu và hỗ trợ</h4>
+                        <p>Để biết thêm thông tin chi tiết về cách sử dụng PowerDNS, vui lòng tham khảo tài liệu chính
+                            thức tại <a href="https://docs.powerdns.com" target="_blank">PowerDNS Documentation</a>.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}
+{% block modals %}
+<div class="modal fade" id="modal_warning">
+    <div class="modal-dialog">
+        <div class="modal-content modal-sm">
+            <div class="modal-header alert-danger">
+                <h4 class="modal-title">
+                    CẢNH BÁO
+                </h4>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close"
+                    id="button_close_warn_modal">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p></p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary center-block" data-dismiss="modal"
+                    id="button_confirm_warn_modal">
+                    ĐÓNG
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

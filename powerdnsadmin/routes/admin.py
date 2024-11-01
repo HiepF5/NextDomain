@@ -464,8 +464,6 @@ def manage_keys():
                     'status': 'ok',
                     'msg': 'Key has been removed.'
                 }), 200)
-
-
 @admin_bp.route('/manage-user', methods=['GET', 'POST'])
 @login_required
 @operator_role_required

@@ -36,13 +36,20 @@ class ZoneTabs:
     """
 
     tabs = {
-        'forward': TabInfo("", None),
-        'reverse_ipv4': TabInfo("in-addr.arpa", '%.in-addr.arpa'),
-        'reverse_ipv6': TabInfo("ip6.arpa", '%.ip6.arpa'),
+    'forward': TabInfo("", None),
+    'reverse_ipv4': TabInfo("in-addr.arpa", '%.in-addr.arpa'),
+    'reverse_ipv6': TabInfo("ip6.arpa", '%.ip6.arpa'),
     }
+    subtabs = {
+    'dns_records': TabInfo("Bản ghi DNS", 'dns_records'),
+    'domain_to_hosting': TabInfo("Cấu hình tên miền về Hosting", 'domain_to_hosting'),
+    'domain_to_email': TabInfo("Cấu hình tên miền về email", 'domain_to_email'),
+    }
+
     """Dict of unique tab id to a TabInfo."""
 
-    order = ['forward', 'reverse_ipv4', 'reverse_ipv6']
+    order = ['forward', 'reverse_ipv4', 'reverse_ipv6', ]
+    ordersubtabs = ['dns_records', 'domain_to_hosting', 'domain_to_email' ]
     """List of tab ids in the order they will appear."""
 
 
