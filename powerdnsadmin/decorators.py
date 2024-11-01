@@ -135,6 +135,21 @@ def can_create_domain(f):
 
     return decorated_function
 
+def user_create_domain(f):
+    """
+    Grant access if:
+        - user is in Operator role or higher, or
+        - allow_user_create_domain is on
+    """
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if current_user.role.name not in [
+            'User'
+        ] and not Setting().get('allow_user_create_domain'):
+            abort(403)
+        return f(*args, **kwargs)
+
+    return decorated_function
 
 def api_basic_auth(f):
     @wraps(f)

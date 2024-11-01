@@ -100,3 +100,9 @@
     background-color: DodgerBlue !important;
     color: #ffffff;
   }
+  .flex {
+    display: flex;
+  }
+  .items-center{
+    align-items: center;
+  }

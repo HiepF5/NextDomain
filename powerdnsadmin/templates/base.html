@@ -7,8 +7,9 @@
         <link rel="icon" href="{{ url_for('static', filename='img/favicon.png') }}">
         {% block title %}<title>{{ SITE_NAME }}</title>{% endblock %}
         <link rel="stylesheet" href="{{ url_for('static', filename='assets/css/style.css') }}">
-        <link rel="stylesheet" href="{{ url_for('static', filename='assets/css/source_sans_pro.css') }}">
         <link rel="stylesheet" href="{{ url_for('static', filename='assets/css/roboto_mono.css') }}">
+        <link rel="stylesheet" href="{{ url_for('static', filename='assets/css/source_sans_pro.css') }}">
+        <!-- <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet"> -->
         <!-- Tell the browser to be responsive to screen width -->
         <meta content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" name="viewport">
         <!-- Tell Safari to not recognise telephone numbers -->
@@ -94,6 +95,22 @@
                                 <p>Create Zone</p>
                             </a>
                         </li>
+                    {% endif %}
+                    {% if SETTING.get('allow_user_create_domain') or current_user.role.name in ['User'] %}
+                        <li class="{{ 'nav-item active' if active_page == 'nav-item new_domain' else 'nav-item' }}">
+                            <a href="{{ url_for('domain.user_add') }}" class="nav-link">
+                                <i class="nav-icon fa-solid fa-plus"></i>
+                                <p>Create Domain</p>
+                            </a>
+                        </li>
+                    {% endif %}
+                    {% if SETTING.get('allow_user_create_domain') or current_user.role.name in ['User'] %}
+                    <li class="{{ 'nav-item active' if active_page == 'nav-item new_domain' else 'nav-item' }}">
+                        <a href="{{ url_for('domain.language') }}" class="nav-link">
+                            <i class="nav-icon fa-solid fa-language"></i>
+                            <p>Language</p>
+                        </a>
+                    </li>
                     {% endif %}
                     {% if SETTING.get('allow_user_remove_domain') or current_user.role.name in ['Administrator', 'Operator'] %}
                         <li class="{{ 'nav-item active' if active_page == 'remove_domain' else 'nav-item' }}">

@@ -11,7 +11,7 @@ from flask_login import login_required, current_user, login_manager
 from ..lib.utils import pretty_domain_name
 from ..lib.utils import pretty_json
 from ..lib.utils import to_idna
-from ..decorators import can_create_domain, operator_role_required, can_access_domain, can_configure_dnssec, can_remove_domain
+from ..decorators import can_create_domain,user_create_domain, operator_role_required, can_access_domain, can_configure_dnssec, can_remove_domain
 from ..models.user import User, Anonymous
 from ..models.account import Account
 from ..models.setting import Setting
@@ -460,6 +460,28 @@ def add():
                                domain_override_toggle=domain_override_toggle)
 
 
+@domain_bp.route('/user_add', methods=['GET', 'POST'])
+@login_required
+@user_create_domain
+def user_add():
+    templates = DomainTemplate.query.all()
+    domain_override_toggle = True
+    accounts = current_user.get_accounts()
+    return render_template('users_domain_add.html',
+                            templates=templates,
+                            accounts=accounts,
+                            domain_override_toggle=domain_override_toggle)
+@domain_bp.route('/language', methods=['GET', 'POST'])
+@login_required
+@user_create_domain
+def language():
+    templates = DomainTemplate.query.all()
+    domain_override_toggle = True
+    accounts = current_user.get_accounts()
+    return render_template('users_domain_add.html',
+                            templates=templates,
+                            accounts=accounts,
+                            domain_override_toggle=domain_override_toggle)
 
 @domain_bp.route('/setting/<path:domain_name>/delete', methods=['POST'])
 @login_required
