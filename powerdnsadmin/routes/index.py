@@ -392,11 +392,12 @@ def login():
         return authenticate_user(user, 'Azure OAuth')
 
     if 'oidc_token' in session:
-        user_data = json.loads(oidc.get('userinfo').text)
-        oidc_username = user_data[Setting().get('oidc_oauth_username')]
-        oidc_first_name = user_data[Setting().get('oidc_oauth_firstname')]
-        oidc_last_name = user_data[Setting().get('oidc_oauth_last_name')]
-        oidc_email = user_data[Setting().get('oidc_oauth_email')]
+        user_data = oidc.userinfo()
+        print(user_data)
+        oidc_username = user_data['name']
+        oidc_first_name = user_data['name']
+        oidc_last_name = user_data['name']
+        oidc_email = user_data['email']
 
         user = User.query.filter_by(username=oidc_username).first()
         if not user:

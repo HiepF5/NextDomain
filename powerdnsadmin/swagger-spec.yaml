@@ -4,7 +4,7 @@ info:
   title: PowerDNS Admin Authoritative HTTP API
   license:
     name: MIT
-host: 10.0.0.53:9191
+host: 10.0.0.66:9191
 basePath: /api/v1
 schemes:
   - http
