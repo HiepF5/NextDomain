@@ -45,21 +45,37 @@
                         <div class="card-body">
                             <div class="tab-content">
                                 <div class="tab-pane fade show active" id="freeDomain">
-                                    <div class="form-group">
-                                        <label for="domain_name">Sub Domain</label>
-                                        <input type="text" class="form-control" name="domain_name" id="domain_name"
-                                            placeholder="Enter a valid SubDomain name (required)">
+                                    <div class="form-row">
+                                        <div class="form-group col-md-4">
+                                            <label for="domain_name">Sub Domain</label>
+                                            <input type="text" class="form-control" name="domain_name" id="domain_name"
+                                                placeholder="Enter a valid SubDomain name (required)" oninput="updateFullDomain()">
+                                        </div>
+                                        <div class="form-group col-md-4">
+                                            <label for="selAccount">Domain</label>
+                                            <select name="accountid" id="selAccount" class="form-control" onchange="updateFullDomain()">
+                                                <option value="0">- Select Domain -</option>
+                                                {% for account in accounts %}
+                                                <option value="{{ account.id }}">{{ account.name }}</option>
+                                                {% endfor %}
+                                            </select>
+                                        </div>
+                                        <div class="form-group col-md-4">
+                                            <label for="full_domain">Full Domain</label>
+                                            <input type="text" class="form-control" id="full_domain" readonly>
+                                        </div>
                                     </div>
-                                    <div class="form-group">
-                                        <label for="selAccount">Domain</label>
-                                        <select name="accountid" id="selAccount" class="form-control">
-                                            <option value="0">- Select Domain -</option>
-                                            {% for account in accounts %}
-                                            <option value="{{ account.id }}">{{ account.name }}</option>
-                                            {% endfor %}
-                                        </select>
+                                    <div class="form-row">
+                                        <div class="form-group col-md-4">
+                                            <span id="domain_check_result"></span>
+                                        </div>
+                                        <div class="form-group col-md-8">
+                                            <button type="button" class="btn btn-secondary float-right" onclick="checkDomainAvailability()">Check
+                                                Domain</button>
+                                        </div>
                                     </div>
                                 </div>
+
                                 <div class="tab-pane fade" id="customDomain">
                                     <div class="form-group">
                                         <label for="custom_domain_name">Thêm tên miền của bạn</label>
@@ -70,12 +86,12 @@
                             </div>
                         </div>
                         <!-- /.card-body -->
-                        <div class="card-footer">
+                        <div class="card-footer ">
                             <button type="button" title="Cancel" class="btn btn-secondary"
-                                onclick="window.location.href='{{ url_for('dashboard.dashboard') }}'">
+                                onclick="window.location.href='{{ url_for('dashboard.dashboard')}}'">
                                 <i class="fa-solid fa-window-close"></i>&nbsp;Cancel
                             </button>
-                            <button type="submit" title="Create Zone" class="btn btn-primary float-right">
+                            <button type="submit" title="Create Zone" class="btn btn-primary float-right" id="create_zone_button" disabled>
                                 <i class="fa-solid fa-save"></i>&nbsp;Create Zone
                             </button>
                         </div>
@@ -100,5 +116,36 @@
             customDomainGroup.style.display = 'none';
         }
     }
+    function updateFullDomain() {
+            const subDomain = document.getElementById('domain_name').value;
+            const domainSelect = document.getElementById('selAccount');
+            const domain = domainSelect.options[domainSelect.selectedIndex].text;
+            const fullDomain = subDomain && domain !== '- Select Domain -' ? `${subDomain}.${domain}` : '';
+            document.getElementById('full_domain').value = fullDomain;
+        }
+    function checkDomainAvailability() {
+            const fullDomain = document.getElementById('full_domain').value;
+            if (!fullDomain) {
+                document.getElementById('domain_check_result').textContent = 'Please enter a valid subdomain and select a domain.';
+                return;
+            }
+
+            // Simulate an API call to check domain availability
+            fetch(`/api/check-domain?domain=${encodeURIComponent(fullDomain)}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.available) {
+                        document.getElementById('domain_check_result').textContent = 'Domain is available.';
+                        document.getElementById('create_zone_button').disabled = false;
+                    } else {
+                        document.getElementById('domain_check_result').textContent = 'Domain is already in use.';
+                        document.getElementById('create_zone_button').disabled = true;
+                    }
+                })
+                .catch(error => {
+                    console.error('Error checking domain availability:', error);
+                    document.getElementById('domain_check_result').textContent = 'Error checking domain availability.';
+                });
+        }
 </script>
 {% endblock %}

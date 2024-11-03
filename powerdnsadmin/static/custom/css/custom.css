@@ -350,3 +350,14 @@ a:hover {
 .form-control:focus {
     border-color: var(--text-secondary-hover);
 }
+
+/*common*/
+.flex {
+    display: flex;
+}
+.gap-2 {
+    gap:0.5rem;
+}
+.gap-4 {
+    gap: 1rem;
+}
