@@ -465,12 +465,187 @@ def add():
 @user_create_domain
 def user_add():
     templates = DomainTemplate.query.all()
-    domain_override_toggle = True
-    accounts = current_user.get_accounts()
-    return render_template('user_domain_add.html',
+    if request.method == 'POST':
+        try:
+            domain_name = request.form.getlist('domain_name')[0]
+            domain_type = request.form.getlist('radio_type')[0]
+            domain_template = request.form.getlist('domain_template')[0]
+            soa_edit_api = request.form.getlist('radio_type_soa_edit_api')[0]
+            account_id = request.form.getlist('accountid')[0]
+
+            if ' ' in domain_name or not domain_name or not domain_type:
+                return render_template(
+                    'errors/400.html',
+                    msg="Please enter a valid zone name"), 400
+
+            if domain_name.endswith('.'):
+                domain_name = domain_name[:-1]
+
+            # If User creates the domain, check some additional stuff
+            if current_user.role.name not in ['User']:
+                # Get all the account_ids of the user
+                user_accounts_ids = current_user.get_accounts()
+                user_accounts_ids = [x.id for x in user_accounts_ids]
+                # User may not create domains without Account
+                if int(account_id) == 0 or int(account_id) not in user_accounts_ids:
+                    return render_template(
+                        'errors/400.html',
+                        msg="Please use a valid Account"), 400
+
+
+            #TODO: Validate ip addresses input
+
+            # Encode domain name into punycode (IDN)
+            try:
+                domain_name = to_idna(domain_name, 'encode')
+            except:
+                current_app.logger.error("Cannot encode the zone name {}".format(domain_name))
+                current_app.logger.debug(traceback.format_exc())
+                return render_template(
+                    'errors/400.html',
+                    msg="Please enter a valid zone name"), 400
+
+            if domain_type == 'slave':
+                if request.form.getlist('domain_master_address'):
+                    domain_master_string = request.form.getlist(
+                        'domain_master_address')[0]
+                    domain_master_string = domain_master_string.replace(
+                        ' ', '')
+                    domain_master_ips = domain_master_string.split(',')
+            else:
+                domain_master_ips = []
+
+            account_name = Account().get_name_by_id(account_id)
+
+            d = Domain()
+
+            ### Test if a record same as the domain already exists in an upper level domain
+            if Setting().get('deny_domain_override'):
+
+                upper_domain = None
+                domain_override = False
+                domain_override_toggle = False
+
+                if current_user.role.name in ['User']:
+                    domain_override = request.form.get('domain_override')
+                    domain_override_toggle = True
+
+
+                # If overriding box is not selected.
+                # False = Do not allow ovrriding, perform checks
+                # True = Allow overriding, do not perform checks
+                if not domain_override:
+                    upper_domain = d.is_overriding(domain_name)
+
+                if upper_domain:
+                    if current_user.role.name in ['User']:
+                        accounts = Account.query.order_by(Account.name).all()
+                    else:
+                        accounts = current_user.get_accounts()
+                    
+                    msg = 'Zone already exists as a record under zone: {}'.format(upper_domain)
+                    
+                    return render_template('user_domain_add.html', 
+                                            domain_override_message=msg,
+                                            accounts=accounts,
+                                            domain_override_toggle=domain_override_toggle)
+           
+            result = d.add(domain_name=domain_name,
+                           domain_type=domain_type,
+                           soa_edit_api=soa_edit_api,
+                           domain_master_ips=domain_master_ips,
+                           account_name=account_name)
+            if result['status'] == 'ok':
+                domain_id = Domain().get_id_by_name(domain_name)
+                history = History(msg='Add zone {0}'.format(
+                    pretty_domain_name(domain_name)),
+                                  detail = json.dumps({
+                                      'domain_type': domain_type,
+                                      'domain_master_ips': domain_master_ips,
+                                      'account_id': account_id
+                                  }),
+                                  created_by=current_user.username,
+                                  domain_id=domain_id)
+                history.add()
+
+                # grant user access to the domain
+                Domain(name=domain_name).grant_privileges([current_user.id])
+
+                # apply template if needed
+                if domain_template != '0':
+                    template = DomainTemplate.query.filter(
+                        DomainTemplate.id == domain_template).first()
+                    template_records = DomainTemplateRecord.query.filter(
+                        DomainTemplateRecord.template_id ==
+                        domain_template).all()
+                    record_data = []
+                    for template_record in template_records:
+                        record_row = {
+                            'record_data': template_record.data,
+                            'record_name': template_record.name,
+                            'record_status': 'Active' if template_record.status else 'Disabled',
+                            'record_ttl': template_record.ttl,
+                            'record_type': template_record.type,
+                            'comment_data': [{'content': template_record.comment, 'account': ''}]
+                        }
+                        record_data.append(record_row)
+                    r = Record()
+                    result = r.apply(domain_name, record_data)
+                    if result['status'] == 'ok':
+                        history = History(
+                            msg='Applying template {0} to {1} successfully.'.
+                            format(template.name, domain_name),
+                            detail = json.dumps({
+                                    'domain':
+                                    domain_name,
+                                    'template':
+                                    template.name,
+                                    'add_rrsets':
+                                    result['data'][0]['rrsets'],
+                                    'del_rrsets':
+                                    result['data'][1]['rrsets']
+                                }),
+                            created_by=current_user.username,
+                            domain_id=domain_id)
+                        history.add()
+                    else:
+                        history = History(
+                            msg=
+                            'Failed to apply template {0} to {1}.'
+                            .format(template.name, domain_name),
+                            detail = json.dumps(result),
+                            created_by=current_user.username)
+                        history.add()
+                return redirect(url_for('dashboard.dashboard'))
+            else:
+                return render_template('errors/400.html',
+                                       msg=result['msg']), 400
+        except Exception as e:
+            current_app.logger.error('Cannot add zone. Error: {0}'.format(e))
+            current_app.logger.debug(traceback.format_exc())
+            abort(500)
+
+    # Get
+    # Get
+    else:
+        domain_override_toggle = False
+        # Admins and Operators can set to any account
+        if current_user.role.name in ['Administrator', 'Operator']:
+            accounts = Account.query.order_by(Account.name).all()
+            domain_override_toggle = True
+        else:
+            accounts = current_user.get_accounts()
+        domain_names = []
+        if accounts:
+            for account in accounts:
+                domains = Domain.query.filter_by(account_id=account.id).all()
+                domain_names.extend([d.name for d in domains])
+        return render_template('user_domain_add.html',
                             templates=templates,
                             accounts=accounts,
-                            domain_override_toggle=domain_override_toggle)
+                            domain_override_toggle=domain_override_toggle,
+                            domain_names=domain_names)
+        
 @domain_bp.route('/language', methods=['GET', 'POST'])
 @login_required
 @user_create_domain
