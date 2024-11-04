@@ -646,6 +646,21 @@ def user_add():
                             domain_override_toggle=domain_override_toggle,
                             domain_names=domain_names)
         
+@domain_bp.route('/check-domain', methods=['GET'])
+@login_required
+@user_create_domain
+def check_domain():
+    domain_name = request.args.get('domain')
+    if not domain_name:
+        return jsonify({'status': 'error', 'msg': 'Domain name is required.'}), 400
+
+    # Check if the domain already exists
+    existing_domain = Domain.query.filter_by(name=domain_name).first()
+    if existing_domain:
+        return jsonify({'status': 'ok', 'available': False, 'msg': 'Domain is already in use.'})
+
+    return jsonify({'status': 'ok', 'available': True, 'msg': 'Domain is available.'})
+
 @domain_bp.route('/language', methods=['GET', 'POST'])
 @login_required
 @user_create_domain

@@ -125,27 +125,39 @@
         }
     function checkDomainAvailability() {
             const fullDomain = document.getElementById('domain_name').value;
-            if (!fullDomain) {
-                document.getElementById('domain_check_result').textContent = 'Please enter a valid subdomain and select a domain.';
-                return;
-            }
+        const resultElement = document.getElementById('domain_check_result');
+        const createButton = document.getElementById('create_zone_button');
 
-            // Simulate an API call to check domain availability
-            fetch(`/api/check-domain?domain=${encodeURIComponent(fullDomain)}`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.available) {
-                        document.getElementById('domain_check_result').textContent = 'Domain is available.';
-                        document.getElementById('create_zone_button').disabled = false;
-                    } else {
-                        document.getElementById('domain_check_result').textContent = 'Domain is already in use.';
-                        document.getElementById('create_zone_button').disabled = true;
-                    }
-                })
-                .catch(error => {
-                    console.error('Error checking domain availability:', error);
-                    document.getElementById('domain_check_result').textContent = 'Error checking domain availability.';
-                });
+        if (!fullDomain) {
+            resultElement.textContent = 'Please enter a valid subdomain and select a domain.';
+            return;
+        }
+
+        // Show a loading message while checking domain availability
+        resultElement.textContent = 'Checking domain availability...';
+
+        // Make an API call to check domain availability
+        const url = `{{ url_for('domain.check_domain') }}?domain=${encodeURIComponent(fullDomain)}`;
+        fetch(url)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.available) {
+                    resultElement.textContent = 'Domain is available.';
+                    createButton.disabled = false;
+                } else {
+                    resultElement.textContent = 'Domain is already in use.';
+                    createButton.disabled = true;
+                }
+            })
+            .catch(error => {
+                console.error('Error checking domain availability:', error);
+                resultElement.textContent = 'Error checking domain availability. Please try again later.';
+            });
         } 
 </script>
 {% endblock %}
