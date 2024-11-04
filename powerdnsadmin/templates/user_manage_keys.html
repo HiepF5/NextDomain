@@ -46,9 +46,7 @@
                 <table id="tbl_keys" class="table table-bordered table-striped table-hover table-sm records">
                     <thead>
                         <tr>
-                            <th>Id</th>
                             <th>Api Key</th>
-                            <th>Role</th>
                             <th>Description</th>
                             <th>Zones</th>
                             <th>Accounts</th>
@@ -58,9 +56,7 @@
                     <tbody>
                         {% for key in keys %}
                         <tr class="odd gradeX">
-                            <td>{{ key.id }}</td>
                             <td id="api-key" data-key="{{ key.key }}">*********************</td>
-                            <td>{{ key.role.name }}</td>
                             <td>{{ key.description }}</td>
                             <td>{% for domain in key.domains %}{{ domain.name }}{% if not loop.last %},
                                 {% endif %}{% endfor %}</td>
@@ -142,14 +138,46 @@
     }
 
     function copyKey() {
-        const keyElement = document.getElementById('api-key');
-        const key = keyElement.getAttribute('data-key');
-        navigator.clipboard.writeText(key).then(() => {
-            $('#copyModal').modal('show');
-        }).catch(err => {
-            console.error('Failed to copy key: ', err);
-        });
-    }
+            const keyElement = document.getElementById('api-key');
+            if (!keyElement) {
+                console.error('Element with ID "api-key" not found');
+                return;
+            }
+            const key = keyElement.getAttribute('data-key');
+            if (!key) {
+                console.error('Attribute "data-key" not found on element');
+                return;
+            }
+
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(key).then(() => {
+                    $('#copyModal').modal('show');
+                }).catch(err => {
+                    console.error('Failed to copy key: ', err);
+                    fallbackCopyTextToClipboard(key);
+                });
+            } else {
+                console.warn('Clipboard API not supported, using fallback method');
+                fallbackCopyTextToClipboard(key);
+            }
+        }
+
+        function fallbackCopyTextToClipboard(text) {
+            const textArea = document.createElement('textarea');
+            textArea.value = text;
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            try {
+                const successful = document.execCommand('copy');
+                const msg = successful ? 'successful' : 'unsuccessful';
+                console.log('Fallback: Copying text command was ' + msg);
+                $('#copyModal').modal('show');
+            } catch (err) {
+                console.error('Fallback: Oops, unable to copy', err);
+            }
+            document.body.removeChild(textArea);
+        }
 </script>
 {% endblock %}
 

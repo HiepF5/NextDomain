@@ -171,10 +171,15 @@
                 "pageLength": {{ SETTING.get('default_domain_table_size') }}
             });
         }
-
-    {% for tab_id in zone_tabs.order %}
-    setUpDomainList("#tbl_domain_list_{{tab_id}}", "{{url_for('dashboard.domains_custom',tab_id=tab_id)}}");
-    {% endfor %}
+    {% if current_user.role.name in ['Administrator', 'Operator'] %}
+        {% for tab_id in zone_tabs.order %}
+        setUpDomainList("#tbl_domain_list_{{tab_id}}", "{{ url_for('dashboard.domains_custom', tab_id=tab_id) }}");
+        {% endfor %}
+    {% elif current_user.role.name == 'User' %}
+        {% for tab_id in zone_tabs.ordersubtabs %}
+        setUpDomainList("#tbl_domain_list_{{tab_id}}", "{{ url_for('dashboard.domains_custom', tab_id=tab_id) }}");
+        {% endfor %}
+    {% endif %}
     //SYBPATCH END//
 
     $(document.body).on('click', '.history-info-button', function () {

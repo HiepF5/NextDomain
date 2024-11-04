@@ -91,7 +91,7 @@
                                 onclick="window.location.href='{{ url_for('dashboard.dashboard')}}'">
                                 <i class="fa-solid fa-window-close"></i>&nbsp;Cancel
                             </button>
-                            <button type="submit" title="Create Zone" class="btn btn-primary float-right" id="create_zone_button" >
+                            <button type="submit" title="Create Zone" class="btn btn-primary float-right" id="create_zone_button" disabled >
                                 <i class="fa-solid fa-save"></i>&nbsp;Create Zone
                             </button>
                         </div>
@@ -123,7 +123,7 @@
             const fullDomain = subDomain && domain !== '- Select Domain -' ? `${subDomain}.${domain}` : '';
             document.getElementById('domain_name').value = fullDomain;
         }
-    /*function checkDomainAvailability() {
+    function checkDomainAvailability() {
             const fullDomain = document.getElementById('domain_name').value;
             if (!fullDomain) {
                 document.getElementById('domain_check_result').textContent = 'Please enter a valid subdomain and select a domain.';
@@ -146,6 +146,6 @@
                     console.error('Error checking domain availability:', error);
                     document.getElementById('domain_check_result').textContent = 'Error checking domain availability.';
                 });
-        } */
+        } 
 </script>
 {% endblock %}
