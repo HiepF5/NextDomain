@@ -3,12 +3,13 @@ import secrets
 import string
 from base64 import b64encode
 from urllib.parse import urljoin
-
+import traceback
+from ..lib.utils import pretty_domain_name
 from flask import (Blueprint, g, request, abort, current_app, make_response, jsonify)
 from flask_login import current_user
 
 from .base import csrf
-from ..decorators import (
+from ..decorators import (user_create_domain,
     api_basic_auth, api_can_create_domain, is_json, apikey_auth,
     apikey_can_create_domain, apikey_can_remove_domain,
     apikey_is_admin, apikey_can_access_domain, apikey_can_configure_dnssec,
@@ -30,9 +31,10 @@ from ..lib.schema import (
     UserDetailedSchema,
 )
 from ..models import (
-    User, Domain, DomainUser, Account, AccountUser, History, Setting, ApiKey,
+    User, Domain, DomainUser, Account, AccountUser, History, Setting, ApiKey, Record,
     Role,
 )
+from ..lib.utils import to_idna
 from ..models.base import db
 
 api_bp = Blueprint('api', __name__, url_prefix='/api/v1')
@@ -1247,3 +1249,306 @@ def health():
         return make_response("Down", 503)
 
     return make_response("Up", 200)
+@api_bp.route('/zones/user_add', methods=['POST'])
+@apikey_auth
+#@api_basic_auth
+@csrf.exempt
+def create_domain():
+    """
+    Create a new domain
+    ---
+    tags:
+        - Domains
+    parameters:
+      - name: domain_name
+        in: body
+        required: true
+        type: string
+        description: Name of the domain to create
+      - name: account_id  
+        in: body
+        required: true
+        type: string
+        description: Account ID to associate domain with
+    responses:
+        201:
+            description: Domain created successfully
+        400:
+            description: Invalid input
+        500:
+            description: Internal server error
+    """
+    try:
+        data = request.get_json()
+        
+        # Validate required fields
+        if not data:
+            return jsonify({
+                'status': 'error',
+                'msg': 'No input data provided'
+            }), 400
+
+        domain_name = data.get('domain_name')
+        account_id = data.get('account_id', '11')  # Default account_id
+        domain_type = data.get('domain_type', 'native')
+        soa_edit_api = data.get('soa_edit_api', 'DEFAULT')
+        domain_master_ips = data.get('domain_master_ips', [])
+
+        # Basic validation
+        if not domain_name or ' ' in domain_name:
+            return jsonify({
+                'status': 'error',
+                'msg': 'Please enter a valid zone name'
+            }), 400
+
+        # Remove trailing dot if present
+        if domain_name.endswith('.'):
+            domain_name = domain_name[:-1]
+
+        # Convert domain name to IDNA
+        try:
+            domain_name = to_idna(domain_name, 'encode')
+        except:
+            current_app.logger.error(f"Cannot encode the zone name {domain_name}")
+            current_app.logger.debug(traceback.format_exc())
+            return jsonify({
+                'status': 'error',
+                'msg': 'Invalid domain name encoding'
+            }), 400
+
+        # Check domain override settings
+        if current_app.config.get('DENY_DOMAIN_OVERRIDE', False):
+            domain_override = data.get('domain_override', False)
+            
+            if not domain_override:
+                d = Domain()
+                upper_domain = d.is_overriding(domain_name)
+                if upper_domain:
+                    return jsonify({
+                        'status': 'error',
+                        'msg': f'Zone already exists as a record under zone: {upper_domain}',
+                        'requires_override': True
+                    }), 409
+
+        # Get account name
+        account_name = Account().get_name_by_id(account_id)
+
+        # Create domain
+        d = Domain()
+        result = d.add(
+            domain_name=domain_name,
+            domain_type=domain_type,
+            soa_edit_api=soa_edit_api,
+            domain_master_ips=domain_master_ips,
+            account_name=account_name
+        )
+
+        if result['status'] == 'ok':
+            domain_id = Domain().get_id_by_name(domain_name)
+            
+            # Add history
+            history = History(
+                msg=f'Add zone {pretty_domain_name(domain_name)}',
+                detail=json.dumps({
+                    'domain_type': domain_type,
+                    'domain_master_ips': domain_master_ips,
+                    'account_id': account_id
+                }),
+                created_by='hiep',
+                domain_id=domain_id
+            )
+            history.add()
+
+            # Grant privileges
+            # Domain(name=domain_name).grant_privileges([current_user.id])
+
+            # Add default records for User role
+            if g.apikey.role.name in ['Administrator', 'Operator', 'User']:
+            #if current_user.role.name not in ['Administrator', 'Operator', 'User']:
+                template_records = [
+                    {
+                        'record_data': 'ns1.powerdnsadmin.com.',
+                        'record_name': '@',
+                        'record_type': 'NS',
+                        'record_status': 'Active',
+                        'record_ttl': 86400,
+                        'comment_data': [{'content': 'Default record sub1', 'account': ''}]
+                    },
+                    {
+                        'record_data': 'ns2.powerdnsadmin.com.',
+                        'record_name': '@',
+                        'record_type': 'NS',
+                        'record_status': 'Active',
+                        'record_ttl': 86400,
+                        'comment_data': [{'content': 'Default record sub2', 'account': ''}]
+                    }
+                ]
+                
+                r = Record()
+                record_result = r.apply(domain_name, template_records)
+                
+                history = History(
+                    msg=f'{"Success" if record_result["status"] == "ok" else "Failed"} to apply template to {domain_name}',
+                    detail=json.dumps(record_result),
+                    created_by='hiep',
+                    domain_id=domain_id
+                )
+                history.add()
+
+            return jsonify({
+                'status': 'ok',
+                'msg': 'Domain created successfully',
+                'domain': {
+                    'name': domain_name,
+                    'type': domain_type,
+                    'id': domain_id
+                }
+            }), 201
+
+        return jsonify({
+            'status': 'error',
+            'msg': result['msg']
+        }), 400
+
+    except Exception as e:
+        current_app.logger.error(f'Cannot add zone. Error: {e}')
+        current_app.logger.debug(traceback.format_exc())
+        return jsonify({
+            'status': 'error',
+            'msg': 'Internal server error'
+        }), 500
+@api_bp.route('/zones/user_record_add', methods=['POST'])
+@apikey_auth
+# @api_basic_auth
+@csrf.exempt
+def create_domain_with_record():
+    """
+    Create a new domain
+    ---
+    tags:
+        - Domains
+    parameters:
+      - name: domain_name
+        in: body
+        required: true
+        type: string
+        description: Name of the domain to create
+      - name: account_id  
+        in: body
+        required: true
+        type: string
+        description: Account ID to associate domain with
+      - name: template_records
+        in: body
+        required: false
+        type: array
+        items:
+          type: object
+        description: Records template to apply for the domain
+    responses:
+        201:
+            description: Domain created successfully
+        400:
+            description: Invalid input
+        500:
+            description: Internal server error
+    """
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({'status': 'error', 'msg': 'No input data provided'}), 400
+
+        domain_name = data.get('domain_name')
+        account_id = data.get('account_id', '11')
+        domain_type = data.get('domain_type', 'native')
+        soa_edit_api = data.get('soa_edit_api', 'DEFAULT')
+        domain_master_ips = data.get('domain_master_ips', [])
+        
+        if not domain_name or ' ' in domain_name:
+            return jsonify({'status': 'error', 'msg': 'Please enter a valid zone name'}), 400
+        
+        if domain_name.endswith('.'):
+            domain_name = domain_name[:-1]
+
+        try:
+            domain_name = to_idna(domain_name, 'encode')
+        except:
+            current_app.logger.error(f"Cannot encode the zone name {domain_name}")
+            return jsonify({'status': 'error', 'msg': 'Invalid domain name encoding'}), 400
+
+        if current_app.config.get('DENY_DOMAIN_OVERRIDE', False):
+            domain_override = data.get('domain_override', False)
+            if not domain_override:
+                d = Domain()
+                upper_domain = d.is_overriding(domain_name)
+                if upper_domain:
+                    return jsonify({
+                        'status': 'error',
+                        'msg': f'Zone already exists as a record under zone: {upper_domain}',
+                        'requires_override': True
+                    }), 409
+
+        account_name = Account().get_name_by_id(account_id)
+
+        d = Domain()
+        result = d.add(
+            domain_name=domain_name,
+            domain_type=domain_type,
+            soa_edit_api=soa_edit_api,
+            domain_master_ips=domain_master_ips,
+            account_name=account_name
+        )
+
+        if result['status'] == 'ok':
+            domain_id = Domain().get_id_by_name(domain_name)
+            
+            history = History(
+                msg=f'Add zone {pretty_domain_name(domain_name)}',
+                detail=json.dumps({
+                    'domain_type': domain_type,
+                    'domain_master_ips': domain_master_ips,
+                    'account_id': account_id
+                }),
+                created_by=account_id.username,
+                domain_id=domain_id
+            )
+            history.add()
+
+            Domain(name=domain_name).grant_privileges([account_id.id])
+
+            # Use the provided template_records or default to specific values
+            template_records = data.get('template_records')
+            
+            r = Record()
+            record_result = r.apply(domain_name, template_records)
+            
+            history = History(
+                msg=f'{"Success" if record_result["status"] == "ok" else "Failed"} to apply template to {domain_name}',
+                detail=json.dumps(record_result),
+                created_by=account_id.username,
+                domain_id=domain_id
+            )
+            history.add()
+
+            return jsonify({
+                'status': 'ok',
+                'msg': 'Domain created successfully',
+                'domain': {
+                    'name': domain_name,
+                    'type': domain_type,
+                    'id': domain_id
+                }
+            }), 201
+
+        return jsonify({
+            'status': 'error',
+            'msg': result['msg']
+        }), 400
+
+    except Exception as e:
+        current_app.logger.error(f'Cannot add zone. Error: {e}')
+        return jsonify({
+            'status': 'error',
+            'msg': 'Internal server error'
+        }), 500

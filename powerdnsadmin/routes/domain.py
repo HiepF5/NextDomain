@@ -467,12 +467,10 @@ def user_add():
     templates = DomainTemplate.query.all()
     if request.method == 'POST':
         try:
-            domain_name = request.form.getlist('domain_name')[0]
-            domain_type = request.form.getlist('radio_type')[0]
-            domain_template = request.form.getlist('domain_template')[0]
-            soa_edit_api = request.form.getlist('radio_type_soa_edit_api')[0]
-            account_id = request.form.getlist('accountid')[0]
-
+            domain_name = request.form.getlist('domain_name')[0] if request.form.getlist('domain_name')[0] else request.form.getlist('custom_domain_name')[0]
+            domain_type = 'native'
+            soa_edit_api = 'DEFAULT'
+            account_id = '16'
             if ' ' in domain_name or not domain_name or not domain_type:
                 return render_template(
                     'errors/400.html',
@@ -570,36 +568,37 @@ def user_add():
 
                 # grant user access to the domain
                 Domain(name=domain_name).grant_privileges([current_user.id])
-
-                # apply template if needed
-                if domain_template != '0':
-                    template = DomainTemplate.query.filter(
-                        DomainTemplate.id == domain_template).first()
-                    template_records = DomainTemplateRecord.query.filter(
-                        DomainTemplateRecord.template_id ==
-                        domain_template).all()
-                    record_data = []
-                    for template_record in template_records:
-                        record_row = {
-                            'record_data': template_record.data,
-                            'record_name': template_record.name,
-                            'record_status': 'Active' if template_record.status else 'Disabled',
-                            'record_ttl': template_record.ttl,
-                            'record_type': template_record.type,
-                            'comment_data': [{'content': template_record.comment, 'account': ''}]
+                # Nếu người dùng là "User", tự động thêm hai bản ghi mẫu
+                if current_user.role.name in ['User']:
+                    template_records = [
+                        {
+                            'record_data': 'ns1.powerdnsadmin.com.',
+                            'record_name': '@',
+                            'record_type': 'NS',
+                            'record_status': 'Active',
+                            'record_ttl': 86400,
+                            'comment_data': [{'content': 'Default record sub1', 'account': ''}]
+                        },
+                        {
+                            'record_data': 'ns2.powerdnsadmin.com.',
+                            'record_name': '@',
+                            'record_type': 'NS',
+                            'record_status': 'Active',
+                            'record_ttl': 86400,
+                            'comment_data': [{'content': 'Default record sub2', 'account': ''}]
                         }
-                        record_data.append(record_row)
+                    ]
                     r = Record()
-                    result = r.apply(domain_name, record_data)
+                    result = r.apply(domain_name, template_records)
                     if result['status'] == 'ok':
                         history = History(
                             msg='Applying template {0} to {1} successfully.'.
-                            format(template.name, domain_name),
+                            format('Teamplate default Nextzen', domain_name),
                             detail = json.dumps({
                                     'domain':
                                     domain_name,
                                     'template':
-                                    template.name,
+                                    'Teamplate default Nextzen',
                                     'add_rrsets':
                                     result['data'][0]['rrsets'],
                                     'del_rrsets':
@@ -612,7 +611,7 @@ def user_add():
                         history = History(
                             msg=
                             'Failed to apply template {0} to {1}.'
-                            .format(template.name, domain_name),
+                            .format('Teamplate default Nextzen', domain_name),
                             detail = json.dumps(result),
                             created_by=current_user.username)
                         history.add()
@@ -625,7 +624,6 @@ def user_add():
             current_app.logger.debug(traceback.format_exc())
             abort(500)
 
-    # Get
     # Get
     else:
         domain_override_toggle = False
