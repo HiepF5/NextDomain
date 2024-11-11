@@ -288,6 +288,7 @@ def add():
     if request.method == 'POST':
         try:
             domain_name = request.form.getlist('domain_name')[0]
+            is_domain_free = 1 if request.form.get('domain_free') == "on" else 0
             domain_type = request.form.getlist('radio_type')[0]
             domain_template = request.form.getlist('domain_template')[0]
             soa_edit_api = request.form.getlist('radio_type_soa_edit_api')[0]
@@ -374,7 +375,10 @@ def add():
                            domain_type=domain_type,
                            soa_edit_api=soa_edit_api,
                            domain_master_ips=domain_master_ips,
-                           account_name=account_name)
+                           is_user_created=0,
+                           is_domain_free=is_domain_free,
+                           account_name=account_name
+                           )
             if result['status'] == 'ok':
                 domain_id = Domain().get_id_by_name(domain_name)
                 history = History(msg='Add zone {0}'.format(
@@ -470,7 +474,9 @@ def user_add():
             domain_name = request.form.getlist('domain_name')[0] if request.form.getlist('domain_name')[0] else request.form.getlist('custom_domain_name')[0]
             domain_type = 'native'
             soa_edit_api = 'DEFAULT'
-            account_id = '16'
+            account_ids = [account.id for account in current_user.accounts]
+            account_id = account_ids[0]
+            
             if ' ' in domain_name or not domain_name or not domain_type:
                 return render_template(
                     'errors/400.html',
@@ -552,6 +558,8 @@ def user_add():
                            domain_type=domain_type,
                            soa_edit_api=soa_edit_api,
                            domain_master_ips=domain_master_ips,
+                           is_user_created=1,
+                           is_domain_free=0,
                            account_name=account_name)
             if result['status'] == 'ok':
                 domain_id = Domain().get_id_by_name(domain_name)
@@ -568,11 +576,19 @@ def user_add():
 
                 # grant user access to the domain
                 Domain(name=domain_name).grant_privileges([current_user.id])
+                
+                # Step 1: Find the domain_ids that meet the conditions
+                domain_name_tuple = db.session.query(Domain.name) \
+                    .filter(
+                        Domain.account_id == account_id,
+                        Domain.is_user_created == 0
+                    ).first()
+                domain_name_default_user = domain_name_tuple[0] if domain_name_tuple else None
                 # Nếu người dùng là "User", tự động thêm hai bản ghi mẫu
                 if current_user.role.name in ['User']:
                     template_records = [
                         {
-                            'record_data': 'ns1.powerdnsadmin.com.',
+                            'record_data': f'ns1.{current_user.username}.{domain_name_default_user}' if domain_name_default_user else None,
                             'record_name': '@',
                             'record_type': 'NS',
                             'record_status': 'Active',
@@ -580,7 +596,7 @@ def user_add():
                             'comment_data': [{'content': 'Default record sub1', 'account': ''}]
                         },
                         {
-                            'record_data': 'ns2.powerdnsadmin.com.',
+                            'record_data': f'ns2.{current_user.username}.{domain_name_default_user}' if domain_name_default_user else None,
                             'record_name': '@',
                             'record_type': 'NS',
                             'record_status': 'Active',
@@ -626,22 +642,14 @@ def user_add():
 
     # Get
     else:
-        domain_override_toggle = False
-        # Admins and Operators can set to any account
-        if current_user.role.name in ['Administrator', 'Operator']:
-            accounts = Account.query.order_by(Account.name).all()
-            domain_override_toggle = True
-        else:
-            accounts = current_user.get_accounts()
+        # account = current_user.get_accounts()
         domain_names = []
-        if accounts:
-            for account in accounts:
-                domains = Domain.query.filter_by(account_id=account.id).all()
-                domain_names.extend([d.name for d in domains])
+        domains = Domain.query.filter(
+            Domain.is_domain_free == 1
+        ).all()
+        domain_names.extend([d.name for d in domains])
         return render_template('user_domain_add.html',
                             templates=templates,
-                            accounts=accounts,
-                            domain_override_toggle=domain_override_toggle,
                             domain_names=domain_names)
         
 @domain_bp.route('/check-domain', methods=['GET'])

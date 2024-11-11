@@ -55,8 +55,8 @@
                                                 oninput="updateFullDomain()">
                                         </div>
                                         <div class="form-group col-md-4">
-                                            <label for="selAccount">Domain</label>
-                                            <select name="accountid" id="selAccount" class="form-control"
+                                            <label for="select_domain">Domain</label>
+                                            <select id="select_domain" name="select_domain" class="form-control"
                                                 onchange="updateFullDomain()">
                                                 <option value="0">- Select Domain -</option>
                                                 {% for domain_name in domain_names %}
@@ -134,7 +134,7 @@
     }
     function updateFullDomain() {
         const subDomain = document.getElementById('subdomain_name').value;
-        const domainSelect = document.getElementById('selAccount');
+        const domainSelect = document.getElementById('select_domain');
         const domain = domainSelect.options[domainSelect.selectedIndex].text;
         const fullDomain = subDomain && domain !== '- Select Domain -' ? `${subDomain}.${domain}` : '';
         document.getElementById('domain_name').value = fullDomain;

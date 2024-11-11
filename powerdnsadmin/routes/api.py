@@ -1340,6 +1340,8 @@ def create_domain():
             domain_type=domain_type,
             soa_edit_api=soa_edit_api,
             domain_master_ips=domain_master_ips,
+            is_user_created=1,
+            is_domain_free=1,
             account_name=account_name
         )
 
@@ -1497,6 +1499,8 @@ def create_domain_with_record():
             domain_type=domain_type,
             soa_edit_api=soa_edit_api,
             domain_master_ips=domain_master_ips,
+            is_user_created=1,
+            is_domain_free=1,
             account_name=account_name
         )
 

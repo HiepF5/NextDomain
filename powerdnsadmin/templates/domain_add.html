@@ -40,6 +40,11 @@
                                     <input type="text" class="form-control" name="domain_name" id="domain_name"
                                            placeholder="Enter a valid zone name (required)">
                                 </div>
+                                <div class="form-group">
+                                    <input type="checkbox" id="domain_free" name="domain_free" class="checkbox">
+                                    &nbsp;
+                                    <label for="domain_free">Zone Free</label>
+                                </div>
                                 {% if domain_override_toggle == True %}
                                     <div class="form-group">
                                         <input type="checkbox" id="domain_override" name="domain_override"

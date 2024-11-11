@@ -26,6 +26,8 @@ class Domain(db.Model):
     notified_serial = db.Column(db.BigInteger)
     last_check = db.Column(db.Integer)
     dnssec = db.Column(db.Integer)
+    is_user_created = db.Column(db.Integer)
+    is_domain_free = db.Column(db.Integer)
     account_id = db.Column(db.Integer, db.ForeignKey('account.id'))
     account = db.relationship("Account", back_populates="domains")
     settings = db.relationship('DomainSetting', back_populates='domain')
@@ -41,6 +43,8 @@ class Domain(db.Model):
                  serial=None,
                  notified_serial=None,
                  last_check=None,
+                 is_user_created=None,
+                 is_domain_free=None,
                  dnssec=None,
                  account_id=None):
         self.id = id
@@ -50,6 +54,8 @@ class Domain(db.Model):
         self.serial = serial
         self.notified_serial = notified_serial
         self.last_check = last_check
+        self.is_user_created = is_user_created
+        self.is_domain_free = is_domain_free
         self.dnssec = dnssec
         self.account_id = account_id
         # PDNS configs
@@ -230,6 +236,8 @@ class Domain(db.Model):
             domain_name,
             domain_type,
             soa_edit_api,
+            is_user_created,
+            is_domain_free,
             domain_ns=[],
             domain_master_ips=[],
             account_name=None):
@@ -275,7 +283,7 @@ class Domain(db.Model):
                 current_app.logger.info(
                     'Added zone successfully to PowerDNS: {0}'.format(
                         domain_name))
-                self.add_domain_to_powerdns_admin(domain_dict=post_data)
+                self.add_domain_to_powerdns_admin(domain_dict=post_data, is_user_created = is_user_created, is_domain_free= is_domain_free)
                 return {'status': 'ok', 'msg': 'Added zone successfully'}
         except Exception as e:
             current_app.logger.error('Cannot add zone {0} {1}'.format(
@@ -283,7 +291,7 @@ class Domain(db.Model):
             current_app.logger.debug(traceback.format_exc())
             return {'status': 'error', 'msg': 'Cannot add this zone.'}
 
-    def add_domain_to_powerdns_admin(self, domain=None, domain_dict=None, do_commit=True):
+    def add_domain_to_powerdns_admin(self, domain=None, domain_dict=None, do_commit=True, is_user_created=0, is_domain_free=0):
         """
         Read zone from PowerDNS and add into PDNS-Admin
         """
@@ -320,6 +328,8 @@ class Domain(db.Model):
         d.last_check = domain['last_check']
         d.dnssec = 1 if domain['dnssec'] else 0
         d.account_id = account_id
+        d.is_user_created = 1 if is_user_created == 1 else 0
+        d.is_domain_free = 1 if is_domain_free == 1 else 0
         db.session.add(d)
         try:
             if do_commit:
