@@ -31,7 +31,7 @@ from ..lib.schema import (
     UserDetailedSchema,
 )
 from ..models import (
-    User, Domain, DomainUser, Account, AccountUser, History, Setting, ApiKey, Record,
+    User, Domain, DomainUser, Account, AccountUser,ApiKeyAccount, History, Setting, ApiKey, Record,
     Role,
 )
 from ..lib.utils import to_idna
@@ -1287,9 +1287,8 @@ def create_domain():
                 'status': 'error',
                 'msg': 'No input data provided'
             }), 400
-
         domain_name = data.get('domain_name')
-        account_id = data.get('account_id', '11')  # Default account_id
+        account_id = g.apikey.accounts[0].id
         domain_type = data.get('domain_type', 'native')
         soa_edit_api = data.get('soa_edit_api', 'DEFAULT')
         domain_master_ips = data.get('domain_master_ips', [])
@@ -1331,7 +1330,7 @@ def create_domain():
                     }), 409
 
         # Get account name
-        account_name = Account().get_name_by_id(account_id)
+        account_name = g.apikey.accounts[0].name
 
         # Create domain
         d = Domain()
@@ -1356,20 +1355,25 @@ def create_domain():
                     'domain_master_ips': domain_master_ips,
                     'account_id': account_id
                 }),
-                created_by='hiep',
+                created_by=account_name,
                 domain_id=domain_id
             )
             history.add()
-
+            accounts_domains = [d.name for a in g.apikey.accounts for d in a.domains if d.is_user_created == 0]
+            current_user = (
+                db.session.query(User.id, User.username)
+                .join(AccountUser, User.id == AccountUser.user_id)
+                .filter(AccountUser.account_id == account_id)
+                .first()
+            )
             # Grant privileges
-            # Domain(name=domain_name).grant_privileges([current_user.id])
+            Domain(name=domain_name).grant_privileges([current_user.id])
 
             # Add default records for User role
             if g.apikey.role.name in ['Administrator', 'Operator', 'User']:
-            #if current_user.role.name not in ['Administrator', 'Operator', 'User']:
                 template_records = [
                     {
-                        'record_data': 'ns1.powerdnsadmin.com.',
+                        'record_data': f'ns1.{current_user.username}.{accounts_domains[0]}' if accounts_domains[0] else None,
                         'record_name': '@',
                         'record_type': 'NS',
                         'record_status': 'Active',
@@ -1377,7 +1381,7 @@ def create_domain():
                         'comment_data': [{'content': 'Default record sub1', 'account': ''}]
                     },
                     {
-                        'record_data': 'ns2.powerdnsadmin.com.',
+                        'record_data': f'ns2.{current_user.username}.{accounts_domains[0]}' if accounts_domains[0] else None,
                         'record_name': '@',
                         'record_type': 'NS',
                         'record_status': 'Active',
@@ -1392,7 +1396,7 @@ def create_domain():
                 history = History(
                     msg=f'{"Success" if record_result["status"] == "ok" else "Failed"} to apply template to {domain_name}',
                     detail=json.dumps(record_result),
-                    created_by='hiep',
+                    created_by=account_name,
                     domain_id=domain_id
                 )
                 history.add()
@@ -1421,7 +1425,6 @@ def create_domain():
         }), 500
 @api_bp.route('/zones/user_record_add', methods=['POST'])
 @apikey_auth
-# @api_basic_auth
 @csrf.exempt
 def create_domain_with_record():
     """
@@ -1462,7 +1465,7 @@ def create_domain_with_record():
             return jsonify({'status': 'error', 'msg': 'No input data provided'}), 400
 
         domain_name = data.get('domain_name')
-        account_id = data.get('account_id', '11')
+        account_id = g.apikey.accounts[0].id
         domain_type = data.get('domain_type', 'native')
         soa_edit_api = data.get('soa_edit_api', 'DEFAULT')
         domain_master_ips = data.get('domain_master_ips', [])
@@ -1491,7 +1494,7 @@ def create_domain_with_record():
                         'requires_override': True
                     }), 409
 
-        account_name = Account().get_name_by_id(account_id)
+        account_name = g.apikey.accounts[0].name
 
         d = Domain()
         result = d.add(
@@ -1514,12 +1517,18 @@ def create_domain_with_record():
                     'domain_master_ips': domain_master_ips,
                     'account_id': account_id
                 }),
-                created_by=account_id.username,
+                created_by=account_name,
                 domain_id=domain_id
             )
             history.add()
+            current_user = (
+                db.session.query(User.id, User.username)
+                .join(AccountUser, User.id == AccountUser.user_id)
+                .filter(AccountUser.account_id == account_id)
+                .first()
+            )
 
-            Domain(name=domain_name).grant_privileges([account_id.id])
+            Domain(name=domain_name).grant_privileges([current_user.id])
 
             # Use the provided template_records or default to specific values
             template_records = data.get('template_records')
@@ -1530,7 +1539,7 @@ def create_domain_with_record():
             history = History(
                 msg=f'{"Success" if record_result["status"] == "ok" else "Failed"} to apply template to {domain_name}',
                 detail=json.dumps(record_result),
-                created_by=account_id.username,
+                created_by=account_name,
                 domain_id=domain_id
             )
             history.add()
