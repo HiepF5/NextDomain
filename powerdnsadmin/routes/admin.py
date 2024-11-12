@@ -384,9 +384,17 @@ def edit_key(key_id=None):
             except Exception as e:
                 current_app.logger.error('Error: {0}'.format(e))
                 raise ApiKeyCreateFail(message='Api key create failed')
-
+            
             plain_key = apikey_plain_schema.dump([apikey])[0]["plain_key"]
+            print(plain_key)
             plain_key = b64encode(plain_key.encode('utf-8')).decode('utf-8')
+            apikey.key_view = plain_key  # Gán plain_key vào trường key_view
+            try:
+                # Cập nhật lại thông tin API key với key_view
+                apikey.update()  # Giả sử có phương thức update() cho ApiKey để cập nhật vào DB
+            except Exception as e:
+                current_app.logger.error('Error updating ApiKey: {0}'.format(e))
+                raise ApiKeyCreateFail(message='Failed to save key_view')
             history_message = "Created API key {0}".format(apikey.id)
 
         # Update existing apikey

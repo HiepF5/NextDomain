@@ -88,7 +88,7 @@
                             <p>Dashboard</p>
                         </a>
                     </li>
-                    {% if SETTING.get('allow_user_create_domain') or current_user.role.name in ['Administrator', 'Operator'] %}
+                    {% if current_user.role.name in ['Administrator', 'Operator'] %}
                         <li class="{{ 'nav-item active' if active_page == 'nav-item new_domain' else 'nav-item' }}">
                             <a href="{{ url_for('domain.add') }}" class="nav-link">
                                 <i class="nav-icon fa-solid fa-plus"></i>
@@ -96,7 +96,7 @@
                             </a>
                         </li>
                     {% endif %}
-                    {% if SETTING.get('allow_user_create_domain') or current_user.role.name in ['User'] %}
+                    {% if current_user.role.name in ['User'] %}
                         <li class="{{ 'nav-item active' if active_page == 'nav-item new_domain' else 'nav-item' }}">
                             <a href="{{ url_for('domain.user_add') }}" class="nav-link">
                                 <i class="nav-icon fa-solid fa-plus"></i>

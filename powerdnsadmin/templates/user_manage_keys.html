@@ -27,17 +27,19 @@
             <div class="card-header with-border">
                 <h3 class="card-title">API Keys</h3>
                 <div class="card-tools flex gap-2">
-                    <button type="button" class="btn btn-primary float-right button_add_key" title="View Key" onclick="toggleKeyVisibility(this)">
+                    <button type="button" class="btn btn-primary float-right button_view_key" title="View Key" onclick="toggleKeyVisibility(this)">
                         <i class="fa-solid fa-eye"></i>&nbsp;View Key
                     </button>
-                    <button type="button" class="btn btn-primary float-right button_add_key" title="Copy Key" onclick="copyKey()">
+                    <button type="button" class="btn btn-primary float-right button_copy_key" title="Copy Key" onclick="copyKey()">
                         <i class="fa-solid fa-copy"></i>&nbsp;Copy Key
                     </button>
-                    <a href="{{ url_for('admin.edit_key') }}">
-                        <button type="button" class="btn btn-primary float-right button_add_key" title="Change Key">
-                            <i class="fa-solid fa-plus"></i>&nbsp;Change Key
-                        </button>
-                    </a>
+                    <button type="button" class="btn btn-primary float-right button_change_key" title="Change Key"
+                        onclick="window.location.href='{{ url_for('user.edit_key', key_id=keys[0].id) }}'">
+                        <i class="fa-solid fa-plus"></i>&nbsp;Change Key
+                    </button>
+
+
+
                 </div>
                 <!-- /.card-tools -->
             </div>
@@ -56,7 +58,7 @@
                     <tbody>
                         {% for key in keys %}
                         <tr class="odd gradeX">
-                            <td id="api-key" data-key="{{ key.key }}">*********************</td>
+                            <td class="api-key" data-key-id="{{ key.id }}" data-key="{{ key.key_view }}">*********************</td>
                             <td>{{ key.description }}</td>
                             <td>{% for domain in key.domains %}{{ domain.name }}{% if not loop.last %},
                                 {% endif %}{% endfor %}</td>
@@ -70,7 +72,7 @@
                                     </button>
                                     <div class="dropdown-menu" aria-labelledby="dropdownMenu">
                                         <button type="button" class="dropdown-item btn-warning"
-                                            onclick="window.location.href='{{ url_for('admin.edit_key', key_id=key.id) }}'">
+                                            onclick="window.location.href='{{ url_for('user.edit_key', key_id=key.id) }}'">
                                             <i class="fa-solid fa-edit"></i>&nbsp;Change API Key
                                         </button>
                                     </div>
@@ -124,25 +126,35 @@
         modal.modal('show');
     });
     function toggleKeyVisibility(button) {
-        const keyElement = document.getElementById('api-key');
-        const iconElement = button.querySelector('i');
-        if (keyElement.textContent === '*********************') {
-            keyElement.textContent = keyElement.getAttribute('data-key');
-            iconElement.classList.remove('fa-eye');
-            iconElement.classList.add('fa-eye-slash');
-        } else {
-            keyElement.textContent = '*********************';
-            iconElement.classList.remove('fa-eye-slash');
-            iconElement.classList.add('fa-eye');
+            const keys = document.querySelectorAll('.api-key');
+            const iconElement = button.querySelector('i');
+
+            keys.forEach((keyElement) => {
+                const key = keyElement.getAttribute('data-key');
+                if (keyElement.textContent === '*********************') {
+                    keyElement.textContent = key;
+                } else {
+                    keyElement.textContent = '*********************';
+                }
+            });
+
+            if (iconElement.classList.contains('fa-eye')) {
+                iconElement.classList.remove('fa-eye');
+                iconElement.classList.add('fa-eye-slash');
+            } else {
+                iconElement.classList.remove('fa-eye-slash');
+                iconElement.classList.add('fa-eye');
+            }
         }
-    }
+
 
     function copyKey() {
-            const keyElement = document.getElementById('api-key');
+            const keyElement = document.querySelector('.api-key');
             if (!keyElement) {
-                console.error('Element with ID "api-key" not found');
+                console.error('No element with class "api-key" found');
                 return;
             }
+
             const key = keyElement.getAttribute('data-key');
             if (!key) {
                 console.error('Attribute "data-key" not found on element');
@@ -151,7 +163,7 @@
 
             if (navigator.clipboard) {
                 navigator.clipboard.writeText(key).then(() => {
-                    $('#copyModal').modal('show');
+                    $('#copyModal').modal('show'); 
                 }).catch(err => {
                     console.error('Failed to copy key: ', err);
                     fallbackCopyTextToClipboard(key);
@@ -172,12 +184,13 @@
                 const successful = document.execCommand('copy');
                 const msg = successful ? 'successful' : 'unsuccessful';
                 console.log('Fallback: Copying text command was ' + msg);
-                $('#copyModal').modal('show');
+                $('#copyModal').modal('show'); 
             } catch (err) {
                 console.error('Fallback: Oops, unable to copy', err);
             }
             document.body.removeChild(textArea);
         }
+
 </script>
 {% endblock %}
 
