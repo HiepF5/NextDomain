@@ -15,7 +15,8 @@ from .account import AccountUser
 from .domain_user import DomainUser
 from .domain_setting import DomainSetting
 from .history import History
-
+from datetime import datetime
+from sqlalchemy.sql import func
 
 class Domain(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -29,6 +30,8 @@ class Domain(db.Model):
     is_user_created = db.Column(db.Integer)
     is_domain_free = db.Column(db.Integer)
     status = db.Column(db.String(255), default='Active')
+    create_at = db.Column(db.DateTime, server_default=db.func.now())
+    updated_at = db.Column(db.DateTime, onupdate=func.now())
     account_id = db.Column(db.Integer, db.ForeignKey('account.id'))
     account = db.relationship("Account", back_populates="domains")
     settings = db.relationship('DomainSetting', back_populates='domain')
@@ -224,6 +227,7 @@ class Domain(db.Model):
             domain.last_check = 1 if data['last_check'] else 0
             domain.dnssec = 1 if data['dnssec'] else 0
             domain.account_id = account_id
+            domain.updated_at = func.now()
             try:
                 if do_commit:
                     db.session.commit()
@@ -335,6 +339,8 @@ class Domain(db.Model):
         d.is_user_created = is_user_created
         d.is_domain_free = is_domain_free
         d.status = status
+        d.create_at = func.now()
+        d.updated_at = func.now()
         db.session.add(d)
         try:
             if do_commit:

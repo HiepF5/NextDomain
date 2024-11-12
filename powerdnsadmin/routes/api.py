@@ -7,8 +7,9 @@ import traceback
 from ..lib.utils import pretty_domain_name
 from flask import (Blueprint, g, request, abort, current_app, make_response, jsonify)
 from flask_login import current_user
-
+from sqlalchemy import desc
 from .base import csrf
+from datetime import datetime
 from ..decorators import (user_create_domain,
     api_basic_auth, api_can_create_domain, is_json, apikey_auth,
     apikey_can_create_domain, apikey_can_remove_domain,
@@ -249,7 +250,7 @@ def api_login_list_zones():
     if current_user.role.name not in ['Administrator', 'Operator']:
         domain_obj_list = get_user_domains()
     else:
-        domain_obj_list = Domain.query.all()
+        domain_obj_list = Domain.query.order_by(desc(Domain.updated_at)).all()
 
     domain_obj_list = [] if domain_obj_list is None else domain_obj_list
     return jsonify(domain_schema.dump(domain_obj_list)), 200
@@ -1190,7 +1191,7 @@ def api_get_zones(server_id):
         if g.apikey.role.name not in ['Administrator', 'Operator']:
             domain_obj_list = g.apikey.domains
         else:
-            domain_obj_list = Domain.query.all()
+            domain_obj_list = Domain.query.order_by(desc(Domain.updated_at)).all()
         return jsonify(domain_schema.dump(domain_obj_list)), 200
     else:
         resp = helper.forward_request()
@@ -1205,8 +1206,18 @@ def api_get_zones(server_id):
                                   if i['name'].rstrip('.') in allowed_domains])
             return content, resp.status_code, resp.headers.items()
         else:
-            return resp.content, resp.status_code, resp.headers.items()
-
+            zones = json.loads(resp.content)
+            domain_dict = {
+                domain.name: domain.updated_at.strftime('%Y-%m-%d %H:%M:%S') if domain.updated_at else "No Update"
+                for domain in Domain.query.all()
+            }
+            for zone in zones:
+                domain_name = zone.get('name', '').rstrip('.')
+                if domain_name in domain_dict:
+                    zone['updated_at'] = domain_dict[domain_name]
+            zones_sorted = sorted(zones, key=lambda x: x['updated_at'], reverse=True)
+            zones_with_updated_at = json.dumps(zones_sorted)
+            return zones_with_updated_at, resp.status_code, resp.headers.items()
 
 @api_bp.route('/servers', methods=['GET'])
 @apikey_auth
