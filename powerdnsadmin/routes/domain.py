@@ -560,89 +560,104 @@ def user_add():
                                             domain_override_message=msg,
                                             accounts=accounts,
                                             domain_override_toggle=domain_override_toggle)
-           
-            result = d.add(domain_name=domain_name,
-                           domain_type=domain_type,
-                           soa_edit_api=soa_edit_api,
-                           domain_master_ips=domain_master_ips,
-                           is_user_created=1,
-                           is_domain_free=0,
-                           status=status,
-                           account_name=account_name)
-            if result['status'] == 'ok':
-                domain_id = Domain().get_id_by_name(domain_name)
-                history = History(msg='Add zone {0}'.format(
-                    pretty_domain_name(domain_name)),
-                                  detail = json.dumps({
-                                      'domain_type': domain_type,
-                                      'domain_master_ips': domain_master_ips,
-                                      'account_id': account_id
-                                  }),
-                                  created_by=current_user.username,
-                                  domain_id=domain_id)
-                history.add()
+            if(status == 'Active'):
+                result = d.add(domain_name=domain_name,
+                            domain_type=domain_type,
+                            soa_edit_api=soa_edit_api,
+                            domain_master_ips=domain_master_ips,
+                            is_user_created=1,
+                            is_domain_free=0,
+                            status=status,
+                            account_name=account_name)
+                if result['status'] == 'ok':
+                    domain_id = Domain().get_id_by_name(domain_name)
+                    history = History(msg='Add zone {0}'.format(
+                        pretty_domain_name(domain_name)),
+                                    detail = json.dumps({
+                                        'domain_type': domain_type,
+                                        'domain_master_ips': domain_master_ips,
+                                        'account_id': account_id
+                                    }),
+                                    created_by=current_user.username,
+                                    domain_id=domain_id)
+                    history.add()
 
-                # grant user access to the domain
-                Domain(name=domain_name).grant_privileges([current_user.id])
-                
-                # Step 1: Find the domain_ids that meet the conditions
-                domain_name_tuple = db.session.query(Domain.name) \
-                    .filter(
-                        Domain.account_id == account_id,
-                        Domain.is_user_created == 0
-                    ).first()
-                domain_name_default_user = domain_name_tuple[0] if domain_name_tuple else None
-                # Nếu người dùng là "User", tự động thêm hai bản ghi mẫu
-                if current_user.role.name in ['User']:
-                    template_records = [
-                        {
-                            'record_data': f'ns1.{current_user.username}.{domain_name_default_user}' if domain_name_default_user else None,
-                            'record_name': '@',
-                            'record_type': 'NS',
-                            'record_status': 'Active',
-                            'record_ttl': 86400,
-                            'comment_data': [{'content': 'Default record sub1', 'account': ''}]
-                        },
-                        {
-                            'record_data': f'ns2.{current_user.username}.{domain_name_default_user}' if domain_name_default_user else None,
-                            'record_name': '@',
-                            'record_type': 'NS',
-                            'record_status': 'Active',
-                            'record_ttl': 86400,
-                            'comment_data': [{'content': 'Default record sub2', 'account': ''}]
-                        }
-                    ]
-                    r = Record()
-                    result = r.apply(domain_name, template_records)
-                    if result['status'] == 'ok':
-                        history = History(
-                            msg='Applying template {0} to {1} successfully.'.
-                            format('Teamplate default Nextzen', domain_name),
-                            detail = json.dumps({
-                                    'domain':
-                                    domain_name,
-                                    'template':
-                                    'Teamplate default Nextzen',
-                                    'add_rrsets':
-                                    result['data'][0]['rrsets'],
-                                    'del_rrsets':
-                                    result['data'][1]['rrsets']
-                                }),
-                            created_by=current_user.username,
-                            domain_id=domain_id)
-                        history.add()
-                    else:
-                        history = History(
-                            msg=
-                            'Failed to apply template {0} to {1}.'
-                            .format('Teamplate default Nextzen', domain_name),
-                            detail = json.dumps(result),
-                            created_by=current_user.username)
-                        history.add()
-                return redirect(url_for('dashboard.dashboard'))
+                    # grant user access to the domain
+                    Domain(name=domain_name).grant_privileges([current_user.id])
+                    
+                    # Step 1: Find the domain_ids that meet the conditions
+                    domain_name_tuple = db.session.query(Domain.name) \
+                        .filter(
+                            Domain.account_id == account_id,
+                            Domain.is_user_created == 0
+                        ).first()
+                    domain_name_default_user = domain_name_tuple[0] if domain_name_tuple else None
+                    # Nếu người dùng là "User", tự động thêm hai bản ghi mẫu
+                    if current_user.role.name in ['User']:
+                        template_records = [
+                            {
+                                'record_data': f'ns1.{current_user.username}.{domain_name_default_user}' if domain_name_default_user else None,
+                                'record_name': '@',
+                                'record_type': 'NS',
+                                'record_status': 'Active',
+                                'record_ttl': 86400,
+                                'comment_data': [{'content': 'Default record sub1', 'account': ''}]
+                            },
+                            {
+                                'record_data': f'ns2.{current_user.username}.{domain_name_default_user}' if domain_name_default_user else None,
+                                'record_name': '@',
+                                'record_type': 'NS',
+                                'record_status': 'Active',
+                                'record_ttl': 86400,
+                                'comment_data': [{'content': 'Default record sub2', 'account': ''}]
+                            }
+                        ]
+                        r = Record()
+                        result = r.apply(domain_name, template_records)
+                        if result['status'] == 'ok':
+                            history = History(
+                                msg='Applying template {0} to {1} successfully.'.
+                                format('Teamplate default Nextzen', domain_name),
+                                detail = json.dumps({
+                                        'domain':
+                                        domain_name,
+                                        'template':
+                                        'Teamplate default Nextzen',
+                                        'add_rrsets':
+                                        result['data'][0]['rrsets'],
+                                        'del_rrsets':
+                                        result['data'][1]['rrsets']
+                                    }),
+                                created_by=current_user.username,
+                                domain_id=domain_id)
+                            history.add()
+                        else:
+                            history = History(
+                                msg=
+                                'Failed to apply template {0} to {1}.'
+                                .format('Teamplate default Nextzen', domain_name),
+                                detail = json.dumps(result),
+                                created_by=current_user.username)
+                            history.add()
+                    return redirect(url_for('dashboard.dashboard'))
+                else:
+                    return render_template('errors/400.html',
+                                        msg=result['msg']), 400
             else:
-                return render_template('errors/400.html',
-                                       msg=result['msg']), 400
+                result = d.add_personal_domain(domain_name=domain_name,
+                            domain_type=domain_type,
+                            soa_edit_api=soa_edit_api,
+                            domain_master_ips=domain_master_ips,
+                            is_user_created=1,
+                            is_domain_free=0,
+                            status=status,
+                            account_name=account_name)
+                if result['status'] == 'ok':
+                    return redirect(url_for('dashboard.dashboard'))
+                else:
+                    return render_template('errors/400.html',
+                                        msg=result['msg']), 400
+
         except Exception as e:
             current_app.logger.error('Cannot add zone. Error: {0}'.format(e))
             current_app.logger.debug(traceback.format_exc())
