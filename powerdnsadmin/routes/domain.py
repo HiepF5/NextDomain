@@ -158,7 +158,9 @@ def remove():
                 db.or_(
                     DomainUser.user_id == current_user.id,
                     AccountUser.user_id == current_user.id
-                )).order_by(Domain.name)
+                ),
+                Domain.is_user_created == 1
+                ).order_by(Domain.name)
 
     if request.method == 'POST':
         # TODO Change name from 'domainid' to something else, its confusing
@@ -377,6 +379,7 @@ def add():
                            domain_master_ips=domain_master_ips,
                            is_user_created=0,
                            is_domain_free=is_domain_free,
+                           status='Active',
                            account_name=account_name
                            )
             if result['status'] == 'ok':
@@ -472,6 +475,10 @@ def user_add():
     if request.method == 'POST':
         try:
             domain_name = request.form.getlist('domain_name')[0] if request.form.getlist('domain_name')[0] else request.form.getlist('custom_domain_name')[0]
+            if domain_name in request.form.getlist('custom_domain_name'):
+                status = 'Pending'
+            else:
+                status = 'Active'
             domain_type = 'native'
             soa_edit_api = 'DEFAULT'
             account_ids = [account.id for account in current_user.accounts]
@@ -560,6 +567,7 @@ def user_add():
                            domain_master_ips=domain_master_ips,
                            is_user_created=1,
                            is_domain_free=0,
+                           status=status,
                            account_name=account_name)
             if result['status'] == 'ok':
                 domain_id = Domain().get_id_by_name(domain_name)
@@ -671,13 +679,20 @@ def check_domain():
 @login_required
 @user_create_domain
 def language():
-    templates = DomainTemplate.query.all()
-    domain_override_toggle = True
-    accounts = current_user.get_accounts()
-    return render_template('user_domain_add.html',
-                            templates=templates,
-                            accounts=accounts,
-                            domain_override_toggle=domain_override_toggle)
+    if request.method == 'POST':
+        # Xử lý POST (người dùng chọn ngôn ngữ)
+        selected_language = request.form.get('language')  # Lấy ngôn ngữ từ form
+        if selected_language:
+            # Lưu ngôn ngữ vào session hoặc cơ sở dữ liệu
+            session['language'] = selected_language  # Lưu vào session
+        return redirect(url_for('domain_bp.language'))  # Reload trang
+
+    # Xử lý GET (hiển thị danh sách ngôn ngữ)
+    supported_languages = ['English', 'Vietnamese', 'French', 'German']  # Danh sách ngôn ngữ
+    current_language = session.get('language', 'English')  # Lấy ngôn ngữ hiện tại (nếu có)
+    return render_template('language.html', 
+                           supported_languages=supported_languages, 
+                           current_language=current_language)
 
 @domain_bp.route('/setting/<path:domain_name>/delete', methods=['POST'])
 @login_required

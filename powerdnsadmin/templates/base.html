@@ -104,7 +104,7 @@
                             </a>
                         </li>
                     {% endif %}
-                    {% if SETTING.get('allow_user_create_domain') or current_user.role.name in ['User'] %}
+                    {% if current_user.role.name in ['User'] %}
                     <li class="{{ 'nav-item active' if active_page == 'nav-item new_domain' else 'nav-item' }}">
                         <a href="{{ url_for('domain.language') }}" class="nav-link">
                             <i class="nav-icon fa-solid fa-language"></i>
@@ -223,7 +223,7 @@
                     <li class="{{ 'nav-item active' if active_page == 'admin_keys' else 'nav-item' }}">
                         <a href="{{ url_for('user.user_guide') }}" class="nav-link">
                             <i class="nav-icon fa-solid fa-book"></i>
-                            <p>Hướng Dẫn</p>
+                            <p>Instructions</p>
                         </a>
                     </li>
                     {% endif %}

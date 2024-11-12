@@ -41,9 +41,9 @@ class ZoneTabs:
     'reverse_ipv6': TabInfo("ip6.arpa", '%.ip6.arpa'),
     }
     subtabs = {
-    'forward': TabInfo("Bản ghi DNS", 'forward'),
-    'domain_to_hosting': TabInfo("Cấu hình tên miền về Hosting", 'domain_to_hosting'),
-    'domain_to_email': TabInfo("Cấu hình tên miền về email", 'domain_to_email'),
+    'forward': TabInfo("DNS Records", 'forward'),
+    'domain_to_hosting': TabInfo("Configure Domain to Hosting", 'domain_to_hosting'),
+    'domain_to_email': TabInfo("Configure Domain to Email", 'domain_to_email'),
     }
 
     """Dict of unique tab id to a TabInfo."""
