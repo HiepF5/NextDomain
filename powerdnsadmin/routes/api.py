@@ -108,7 +108,11 @@ def get_role_id(role_name, role_id=None):
         role = Role.query.filter(Role.name == role_name).first()
         role_id = role.id if role else None
     return role_id
-
+def is_valid_domain(domain_name, domain_name_free):
+            for free_domain in domain_name_free:
+                if domain_name.endswith(f".{free_domain}") or domain_name == free_domain:
+                    return True
+            return False
 
 @api_bp.errorhandler(400)
 def handle_400(err):
@@ -1292,6 +1296,7 @@ def create_domain():
     try:
         data = request.get_json()
         
+        
         # Validate required fields
         if not data:
             return jsonify({
@@ -1304,6 +1309,15 @@ def create_domain():
         soa_edit_api = data.get('soa_edit_api', 'DEFAULT')
         domain_master_ips = data.get('domain_master_ips', [])
 
+        domain_name_free = []
+        domains_free = Domain.query.filter(
+            Domain.is_domain_free == 1
+        ).all()
+        domain_name_free.extend([d.name for d in domains_free])
+        # Thực hiện kiểm tra
+        if not is_valid_domain(domain_name, domain_name_free):
+            return jsonify({"error": "Invalid domain name"}), 400
+        
         # Basic validation
         if not domain_name or ' ' in domain_name:
             return jsonify({
@@ -1481,7 +1495,14 @@ def create_domain_with_record():
         domain_type = data.get('domain_type', 'native')
         soa_edit_api = data.get('soa_edit_api', 'DEFAULT')
         domain_master_ips = data.get('domain_master_ips', [])
-        
+        domain_name_free = []
+        domains_free = Domain.query.filter(
+            Domain.is_domain_free == 1
+        ).all()
+        domain_name_free.extend([d.name for d in domains_free])
+        # Thực hiện kiểm tra
+        if not is_valid_domain(domain_name, domain_name_free):
+            return jsonify({"error": "Invalid domain name"}), 400
         if not domain_name or ' ' in domain_name:
             return jsonify({'status': 'error', 'msg': 'Please enter a valid zone name'}), 400
         
