@@ -1,6 +1,13 @@
 {% macro name(domain) %}
-    <a href="{{ url_for('domain.domain', domain_name=domain.name) }}">
+    {% if domain.status == 'Pending' %}
+    <a href="">
         <strong>{{ domain.name | pretty_domain_name }}</strong>
+    </a>
+    {% else %}
+        <a href="{{ url_for('domain.domain', domain_name=domain.name) }}">
+            <strong>{{ domain.name | pretty_domain_name }}</strong>
+        </a>
+    {% endif %}
     <td>
         <span class="
                 {% if domain.status == 'Active' %} status-dot text-success 
@@ -10,10 +17,6 @@
                 {% endif %}
         "></span>
     </td>
-
-
-
-</a>
 {% endmacro %}
 
 {% macro dnssec(domain) %}

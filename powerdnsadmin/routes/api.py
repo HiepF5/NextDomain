@@ -1162,6 +1162,16 @@ def api_server_sub_forward(subpath):
 @apikey_can_create_domain
 @csrf.exempt
 def api_create_zone(server_id):
+    data = request.json
+    domain_name = data.get('name', '').rstrip('.')
+    domain_name_free = []
+    domains_free = Domain.query.filter(
+        Domain.is_domain_free == 1
+    ).all()
+    domain_name_free.extend([d.name for d in domains_free])
+    if not is_valid_domain(domain_name, domain_name_free):
+        return jsonify({"error": "Invalid domain name: Domain is not free"}), 400
+
     resp = helper.forward_request()
 
     if resp.status_code == 201:
@@ -1268,7 +1278,7 @@ def health():
 @apikey_auth
 #@api_basic_auth
 @csrf.exempt
-def create_domain():
+def api_create_domain_free():
     """
     Create a new domain
     ---
@@ -1452,7 +1462,7 @@ def create_domain():
 @api_bp.route('/zones/user_record_add', methods=['POST'])
 @apikey_auth
 @csrf.exempt
-def create_domain_with_record():
+def api_create_domain_free_with_record():
     """
     Create a new domain
     ---
@@ -1595,6 +1605,191 @@ def create_domain_with_record():
 
     except Exception as e:
         current_app.logger.error(f'Cannot add zone. Error: {e}')
+        return jsonify({
+            'status': 'error',
+            'msg': 'Internal server error'
+        }), 500
+@api_bp.route('/zones/user_add_personal', methods=['POST'])
+@apikey_auth
+#@api_basic_auth
+@csrf.exempt
+def api_create_domain_personal():
+    """
+    Create a new domain
+    ---
+    tags:
+        - Domains
+    parameters:
+      - name: domain_name
+        in: body
+        required: true
+        type: string
+        description: Name of the domain to create
+      - name: account_id  
+        in: body
+        required: true
+        type: string
+        description: Account ID to associate domain with
+    responses:
+        201:
+            description: Domain created successfully
+        400:
+            description: Invalid input
+        500:
+            description: Internal server error
+    """
+    try:
+        data = request.get_json()
+        
+        
+        # Validate required fields
+        if not data:
+            return jsonify({
+                'status': 'error',
+                'msg': 'No input data provided'
+            }), 400
+        domain_name = data.get('domain_name')
+        account_id = g.apikey.accounts[0].id
+        domain_type = data.get('domain_type', 'native')
+        soa_edit_api = data.get('soa_edit_api', 'DEFAULT')
+        domain_master_ips = data.get('domain_master_ips', [])
+
+        domain_name_free = []
+        domains_free = Domain.query.filter(
+            Domain.is_domain_free == 1
+        ).all()
+        domain_name_free.extend([d.name for d in domains_free])
+        # Thực hiện kiểm tra
+        if not is_valid_domain(domain_name, domain_name_free):
+            return jsonify({"error": "Invalid domain name"}), 400
+        
+        # Basic validation
+        if not domain_name or ' ' in domain_name:
+            return jsonify({
+                'status': 'error',
+                'msg': 'Please enter a valid zone name'
+            }), 400
+
+        # Remove trailing dot if present
+        if domain_name.endswith('.'):
+            domain_name = domain_name[:-1]
+
+        # Convert domain name to IDNA
+        try:
+            domain_name = to_idna(domain_name, 'encode')
+        except:
+            current_app.logger.error(f"Cannot encode the zone name {domain_name}")
+            current_app.logger.debug(traceback.format_exc())
+            return jsonify({
+                'status': 'error',
+                'msg': 'Invalid domain name encoding'
+            }), 400
+
+        # Check domain override settings
+        if current_app.config.get('DENY_DOMAIN_OVERRIDE', False):
+            domain_override = data.get('domain_override', False)
+            
+            if not domain_override:
+                d = Domain()
+                upper_domain = d.is_overriding(domain_name)
+                if upper_domain:
+                    return jsonify({
+                        'status': 'error',
+                        'msg': f'Zone already exists as a record under zone: {upper_domain}',
+                        'requires_override': True
+                    }), 409
+
+        # Get account name
+        account_name = g.apikey.accounts[0].name
+
+        # Create domain
+        d = Domain()
+        result = d.add(
+            domain_name=domain_name,
+            domain_type=domain_type,
+            soa_edit_api=soa_edit_api,
+            domain_master_ips=domain_master_ips,
+            is_user_created=1,
+            is_domain_free=0,
+            status='Active',
+            account_name=account_name
+        )
+
+        if result['status'] == 'ok':
+            domain_id = Domain().get_id_by_name(domain_name)
+            
+            # Add history
+            history = History(
+                msg=f'Add zone {pretty_domain_name(domain_name)}',
+                detail=json.dumps({
+                    'domain_type': domain_type,
+                    'domain_master_ips': domain_master_ips,
+                    'account_id': account_id
+                }),
+                created_by=account_name,
+                domain_id=domain_id
+            )
+            history.add()
+            accounts_domains = [d.name for a in g.apikey.accounts for d in a.domains if d.is_user_created == 0]
+            current_user = (
+                db.session.query(User.id, User.username)
+                .join(AccountUser, User.id == AccountUser.user_id)
+                .filter(AccountUser.account_id == account_id)
+                .first()
+            )
+            # Grant privileges
+            Domain(name=domain_name).grant_privileges([current_user.id])
+
+            # Add default records for User role
+            if g.apikey.role.name in ['Administrator', 'Operator', 'User']:
+                template_records = [
+                    {
+                        'record_data': f'ns1.{current_user.username}.{accounts_domains[0]}' if accounts_domains[0] else None,
+                        'record_name': '@',
+                        'record_type': 'NS',
+                        'record_status': 'Active',
+                        'record_ttl': 86400,
+                        'comment_data': [{'content': 'Default record sub1', 'account': ''}]
+                    },
+                    {
+                        'record_data': f'ns2.{current_user.username}.{accounts_domains[0]}' if accounts_domains[0] else None,
+                        'record_name': '@',
+                        'record_type': 'NS',
+                        'record_status': 'Active',
+                        'record_ttl': 86400,
+                        'comment_data': [{'content': 'Default record sub2', 'account': ''}]
+                    }
+                ]
+                
+                r = Record()
+                record_result = r.apply(domain_name, template_records)
+                
+                history = History(
+                    msg=f'{"Success" if record_result["status"] == "ok" else "Failed"} to apply template to {domain_name}',
+                    detail=json.dumps(record_result),
+                    created_by=account_name,
+                    domain_id=domain_id
+                )
+                history.add()
+
+            return jsonify({
+                'status': 'ok',
+                'msg': 'Domain created successfully',
+                'domain': {
+                    'name': domain_name,
+                    'type': domain_type,
+                    'id': domain_id
+                }
+            }), 201
+
+        return jsonify({
+            'status': 'error',
+            'msg': result['msg']
+        }), 400
+
+    except Exception as e:
+        current_app.logger.error(f'Cannot add zone. Error: {e}')
+        current_app.logger.debug(traceback.format_exc())
         return jsonify({
             'status': 'error',
             'msg': 'Internal server error'
