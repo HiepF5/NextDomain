@@ -1,7 +1,8 @@
 {% macro name(domain) %}
     {% if domain.status == 'Pending' %}
-    <a href="">
+    <a href="#" class="pending-domain" data-domain="{{ domain.name }}">
         <strong>{{ domain.name | pretty_domain_name }}</strong>
+        <span class="badge badge-warning">Pending</span>
     </a>
     {% else %}
         <a href="{{ url_for('domain.domain', domain_name=domain.name) }}">

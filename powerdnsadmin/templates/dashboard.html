@@ -237,6 +237,22 @@
         enable_dns_sec($SCRIPT_ROOT + '/domain/' + encodeURIComponent(domain) + '/dnssec/disable', '{{ csrf_token() }}');
     });
     {% endif %}
+
+   $(function () {
+        console.log('Document ready');  // Debug line
+
+        $(document).on('click', '.pending-domain', function (e) {
+            console.log('Click detected');  // Debug line
+            e.preventDefault();
+            e.stopPropagation();
+
+            var domainName = $(this).data('domain');
+            console.log('Domain name:', domainName);  // Debug line
+
+            $('#modalDomainName').text(domainName);
+            $('#pendingDomainModal').modal('show');
+        });
+    });
 </script>
 {% endblock %}
 
@@ -326,6 +342,27 @@
                 <button type="button" class="btn btn-secondary float-right" data-dismiss="modal">
                     Close
                 </button>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="modal fade" id="pendingDomainModal" tabindex="-1" role="dialog" aria-labelledby="pendingDomainModalLabel"
+    aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="pendingDomainModalLabel">Pending Domain Details</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p>Domain Name: <span id="modalDomainName"></span></p>
+                <p>Status: <span class="badge badge-warning">Pending</span></p>
+                <p>This domain is currently pending approval. Please wait for administrator verification.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
             </div>
         </div>
     </div>

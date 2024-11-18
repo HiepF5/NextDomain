@@ -198,7 +198,7 @@ class Domain(db.Model):
                     account_id = None
                 domain = dict_db_domain.get(data['name'].rstrip('.'), None)
                 if domain:
-                    self.update_pdns_admin_domain(domain, account_id, data, do_commit=False)
+                    self.update_pdns_admin_domain(domain, account_id, data, do_commit=False, is_user_created=domain.is_user_created, is_domain_free=domain.is_domain_free, status=domain.status)
                 else:
                     # add new domain
                     self.add_domain_to_powerdns_admin(domain=data, do_commit=False)
@@ -215,7 +215,7 @@ class Domain(db.Model):
                 'Cannot update zone table. Error: {0}'.format(e))
             return {'status': 'error', 'msg': 'Cannot update zone table'}
 
-    def update_pdns_admin_domain(self, domain, account_id, data, do_commit=True):
+    def update_pdns_admin_domain(self, domain, account_id, data, do_commit=True, is_user_created=0, is_domain_free=0, status='Active'):
         # existing domain, only update if something actually has changed
         if (domain.master != str(data['masters'])
                 or domain.type != data['kind']
@@ -233,6 +233,8 @@ class Domain(db.Model):
             domain.dnssec = 1 if data['dnssec'] else 0
             domain.account_id = account_id
             domain.updated_at = func.now()
+            domain.is_user_created = is_user_created
+            domain.is_domain_free = is_domain_free
             try:
                 if do_commit:
                     db.session.commit()

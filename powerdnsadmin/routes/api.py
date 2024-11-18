@@ -1182,7 +1182,7 @@ def api_create_zone(server_id):
         if g.apikey.role.name not in ['Administrator', 'Operator']:
             current_app.logger.debug(
                 "Apikey is user key, assigning created zone")
-            domain = Domain(name=data['name'].rstrip('.'))
+            domain = Domain(name=data['name'].rstrip('.'), is_user_created=1)
             g.apikey.domains.append(domain)
 
         domain = Domain()
@@ -1205,7 +1205,8 @@ def api_get_zones(server_id):
         if g.apikey.role.name not in ['Administrator', 'Operator']:
             domain_obj_list = g.apikey.domains
         else:
-            domain_obj_list = Domain.query.order_by(desc(Domain.updated_at)).all()
+            # domain_obj_list = Domain.query.order_by(desc(Domain.updated_at)).all()
+            domain_obj_list = Domain.query.all()
         return jsonify(domain_schema.dump(domain_obj_list)), 200
     else:
         resp = helper.forward_request()
@@ -1315,7 +1316,7 @@ def api_create_domain_free():
             }), 400
         domain_name = data.get('domain_name')
         account_id = g.apikey.accounts[0].id
-        domain_type = data.get('domain_type', 'native')
+        domain_type = data.get('domain_type', 'Native')
         soa_edit_api = data.get('soa_edit_api', 'DEFAULT')
         domain_master_ips = data.get('domain_master_ips', [])
 
@@ -1502,7 +1503,7 @@ def api_create_domain_free_with_record():
 
         domain_name = data.get('domain_name')
         account_id = g.apikey.accounts[0].id
-        domain_type = data.get('domain_type', 'native')
+        domain_type = data.get('domain_type', 'Native')
         soa_edit_api = data.get('soa_edit_api', 'DEFAULT')
         domain_master_ips = data.get('domain_master_ips', [])
         domain_name_free = []
@@ -1650,7 +1651,7 @@ def api_create_domain_personal():
             }), 400
         domain_name = data.get('domain_name')
         account_id = g.apikey.accounts[0].id
-        domain_type = data.get('domain_type', 'native')
+        domain_type = data.get('domain_type', 'Native')
         soa_edit_api = data.get('soa_edit_api', 'DEFAULT')
         domain_master_ips = data.get('domain_master_ips', [])
 
