@@ -4,6 +4,8 @@ import string
 from base64 import b64encode
 from urllib.parse import urljoin
 import traceback
+
+import requests
 from ..lib.utils import pretty_domain_name
 from flask import (Blueprint, g, request, abort, current_app, make_response, jsonify)
 from flask_login import current_user
@@ -17,6 +19,7 @@ from ..decorators import (user_create_domain,
     api_role_can, apikey_or_basic_auth,
     callback_if_request_body_contains_key, allowed_record_types, allowed_record_ttl
 )
+from ..models.domain import Domain
 from ..lib import utils, helper
 from ..lib.errors import (
     StructuredException,
@@ -1795,3 +1798,62 @@ def api_create_domain_personal():
             'status': 'error',
             'msg': 'Internal server error'
         }), 500
+@api_bp.route('/change-domain-status', methods=['POST'])
+@apikey_auth
+@csrf.exempt
+def change_domain_status():
+    data = request.json
+    domain_name = data.get('name').rstrip('.')
+
+    if not domain_name:
+        return jsonify({'status': 'error', 'msg': 'Domain name is required.'}), 400
+
+    # Tìm domain trong cơ sở dữ liệu
+    domain = Domain.query.filter_by(name=domain_name).first()
+    if not domain:
+        return jsonify({'status': 'error', 'msg': 'Domain not found.'}), 404
+
+    # Kiểm tra trạng thái hiện tại của domain
+    if domain.status != 'Pending':
+        return jsonify({'status': 'error', 'msg': 'Domain status is not Pending.'}), 400
+
+    # Thay đổi trạng thái của domain thành Active
+    try:
+        db.session.delete(domain)
+        db.session.commit()
+
+        # Đồng bộ domain xuống PowerDNS bằng cách gọi hàm api_create_zone
+        sync_result = api_create_zone_internal(data)
+        if not sync_result['status'] == 'ok':
+            raise Exception(sync_result['msg'])
+
+        # Ghi lại lịch sử thay đổi
+        history = History(msg='Changed status of zone {0} to Active'.format(pretty_domain_name(domain_name)),
+                          detail=json.dumps({
+                              'domain': domain_name,
+                              'status': 'Active'
+                          }),
+                          created_by=current_user.username,
+                          domain_id=domain.id)
+        history.add()
+
+        return jsonify({'status': 'ok', 'msg': 'Domain status changed to Active and synced to PowerDNS.'}), 200
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error('Cannot change domain status. Error: {0}'.format(e))
+        return jsonify({'status': 'error', 'msg': 'Cannot change domain status.'}), 500
+    
+def api_create_zone_internal(data):
+    d = Domain()
+    account_name = g.apikey.accounts[0].name
+    result = d.add(domain_name=data.get('name'),
+                           domain_type=data.get('type', 'Native'),
+                           soa_edit_api=data.get('soa_edit_api', 'DEFAULT'),
+                           domain_master_ips=data.get('domain_master_ips', []),
+                           is_user_created=1,
+                           is_domain_free=0,
+                           status='Active',
+                           account_name=account_name)
+    if result['status'] == 'ok':
+        return {'status': 'ok', 'msg': 'Domain created successfully'}
+    

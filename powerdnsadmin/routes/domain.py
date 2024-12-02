@@ -479,7 +479,7 @@ def user_add():
                 status = 'Pending'
             else:
                 status = 'Active'
-            domain_type = 'native'
+            domain_type = 'Native'
             soa_edit_api = 'DEFAULT'
             account_ids = [account.id for account in current_user.accounts]
             account_id = account_ids[0]

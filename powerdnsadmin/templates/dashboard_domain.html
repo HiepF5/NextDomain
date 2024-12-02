@@ -1,22 +1,19 @@
 {% macro name(domain) %}
-    {% if domain.status == 'Pending' %}
-    <a href="#" class="pending-domain" data-domain="{{ domain.name }}">
+    <a href="{{ '#' if domain.status == 'Pending' else url_for('domain.domain', domain_name=domain.name) }}"
+        class="{{ 'pending-domain' if domain.status == 'Pending' else '' }}" data-domain="{{ domain.name }}">
         <strong>{{ domain.name | pretty_domain_name }}</strong>
-        <span class="badge badge-warning">Pending</span>
     </a>
-    {% else %}
-        <a href="{{ url_for('domain.domain', domain_name=domain.name) }}">
-            <strong>{{ domain.name | pretty_domain_name }}</strong>
-        </a>
-    {% endif %}
     <td>
         <span class="
-                {% if domain.status == 'Active' %} status-dot text-success 
-                {% elif domain.status == 'Pending' %} status-dot text-warning 
-                {% elif domain.status == 'Deactive' %} status-dot text-danger 
-                {% else %} status-dot text-muted 
-                {% endif %}
-        "></span>
+                    {% if domain.status == 'Active' %} status-dot text-success 
+                    {% elif domain.status == 'Pending' %} status-dot text-warning 
+                    {% elif domain.status == 'Deactive' %} status-dot text-danger 
+                    {% else %} status-dot text-muted 
+                    {% endif %}
+            "></span>
+        {% if domain.status == 'Pending' %}
+        <span class="badge badge-warning">Pending</span>
+        {% endif %}
     </td>
 {% endmacro %}
 

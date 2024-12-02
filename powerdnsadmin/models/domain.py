@@ -535,8 +535,16 @@ class Domain(db.Model):
         Delete a single zone name from powerdns
         """
         try:
-            self.delete_domain_from_powerdns(domain_name)
-            self.delete_domain_from_pdnsadmin(domain_name)
+            domain = Domain.query.filter_by(name=domain_name).first()
+            if domain:
+                if domain.status == 'Pending':
+                    current_app.logger.info(f"Domain {domain_name} có trạng thái 'Pending', chỉ xóa từ pdnsadmin.")
+                    self.delete_domain_from_pdnsadmin(domain_name)
+                else:
+                    self.delete_domain_from_powerdns(domain_name)
+                    self.delete_domain_from_pdnsadmin(domain_name)
+            else:
+                current_app.logger.info(f"Domain {domain_name} không tồn tại trong bảng Domain, bỏ qua việc xóa.")
             return {'status': 'ok', 'msg': 'Delete zone successfully'}
         except Exception as e:
             current_app.logger.error(
