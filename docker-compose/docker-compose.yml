@@ -9,7 +9,7 @@ services:
       - MYSQL_USER=pdns
       - MYSQL_PASSWORD=mypdns
     ports:
-      - 3306:3306
+      - 3307:3306
     restart: always
     volumes:
       - ./pda-mysql:/var/lib/mysql
@@ -43,10 +43,8 @@ services:
       - PDNS_webserver_password=secret2
       - PDNS_version_string=anonymous
       - PDNS_default_ttl=1500
-      - PDNS_allow_notify_from=10.0.0.67,10.0.0.69
-      - PDNS_allow_axfr_ips=10.0.0.67,10.0.0.69
   web_app:
-    image: nextdomain:1.0
+    image: hiepf5/nextdomain:1.0
     container_name: powerdns_admin
     ports:
       - "8080:80"

@@ -46,3 +46,5 @@ rcssmin==1.1.1
 zxcvbn==4.4.28
 psycopg2==2.9.5
 setuptools==65.5.1 # fixes CVE-2022-40897
+flask_swagger_ui==3.36.0
+flask_cors==5.0.0

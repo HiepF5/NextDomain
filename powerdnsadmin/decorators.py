@@ -285,7 +285,41 @@ def api_role_can(action, roles=None, allow_self=False):
         return decorated_function
 
     return decorator
+def api_role_can_apikey(action, roles=None, allow_self=False):
+    """
+    Grant access if:
+        - user is in the permitted roles
+        - allow_self and kwargs['user_id'] = current_user.id
+        - allow_self and kwargs['username'] = current_user.username
+    """
+    if roles is None:
+        roles = ['Administrator', 'Operator']
 
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            try:
+                user_id = int(kwargs.get('user_id'))
+            except:
+                user_id = None
+            try:
+                username = kwargs.get('username')
+            except:
+                username = None
+            if (
+                    (g.apikey.role.name in roles) or
+                    (allow_self and user_id and g.apikey.id == user_id) or
+                    (allow_self and username and current_user.username == username)
+            ):
+                return f(*args, **kwargs)
+            msg = (
+                "User {} with role {} does not have enough privileges to {}"
+            ).format(current_user.username, current_user.role.name, action)
+            raise NotEnoughPrivileges(message=msg)
+
+        return decorated_function
+
+    return decorator
 
 def api_can_create_domain(f):
     """

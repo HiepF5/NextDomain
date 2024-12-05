@@ -13,7 +13,7 @@ from sqlalchemy import desc
 from .base import csrf
 from datetime import datetime
 from ..decorators import (user_create_domain,
-    api_basic_auth, api_can_create_domain, is_json, apikey_auth,
+    api_basic_auth,api_role_can_apikey, api_can_create_domain, is_json, apikey_auth,
     apikey_can_create_domain, apikey_can_remove_domain,
     apikey_is_admin, apikey_can_access_domain, apikey_can_configure_dnssec,
     api_role_can, apikey_or_basic_auth,
@@ -196,8 +196,10 @@ def index():
 
 
 @api_bp.route('/pdnsadmin/zones', methods=['POST'])
-@api_basic_auth
-@api_can_create_domain
+# @api_basic_auth
+# @apikey_or_basic_auth
+@apikey_auth
+@apikey_can_create_domain
 @csrf.exempt
 def api_login_create_zone():
     pdns_api_url = Setting().get('pdns_api_url')
@@ -231,20 +233,31 @@ def api_login_create_zone():
         domain = Domain()
         domain.update()
         domain_id = domain.get_id_by_name(data['name'].rstrip('.'))
-
+        account_name = data.get('account')
+        
         history = History(msg='Add zone {0}'.format(
             data['name'].rstrip('.')),
             detail=json.dumps(data),
-            created_by=current_user.username,
+            created_by=account_name,
             domain_id=domain_id)
         history.add()
 
-        if current_user.role.name not in ['Administrator', 'Operator']:
+        # if current_user.role.name not in ['Administrator', 'Operator']:
+        if g.apikey.role.name not in ['Administrator', 'Operator']:
             current_app.logger.debug("User is ordinary user, assigning created zone")
-            domain = Domain(name=data['name'].rstrip('.'))
+            domain = Domain(name=data['name'].rstrip('.'), is_user_created=1)
             domain.update()
-            domain.grant_privileges([current_user.id])
+            
+            # Grant privileges
+            Domain(name=data.name).grant_privileges([current_user.id])
+        else :
+            current_app.logger.debug(
+                "Apikey is user key, assigning created zone")
+            domain = Domain(name=data['name'].rstrip('.'), is_user_created=0)
+            domain.update()
 
+        domain = Domain()
+        domain.update()
     if resp.status_code == 409:
         raise (DomainAlreadyExists)
 
@@ -252,9 +265,11 @@ def api_login_create_zone():
 
 
 @api_bp.route('/pdnsadmin/zones', methods=['GET'])
-@api_basic_auth
+# @api_basic_auth
+@apikey_auth
 def api_login_list_zones():
-    if current_user.role.name not in ['Administrator', 'Operator']:
+    # if current_user.role.name not in ['Administrator', 'Operator']:
+    if g.apikey.role.name not in ['Administrator', 'Operator']:
         domain_obj_list = get_user_domains()
     else:
         domain_obj_list = Domain.query.order_by(desc(Domain.updated_at)).all()
@@ -264,8 +279,9 @@ def api_login_list_zones():
 
 
 @api_bp.route('/pdnsadmin/zones/<string:domain_name>', methods=['DELETE'])
-@api_basic_auth
-@api_can_create_domain
+# @api_basic_auth
+@apikey_auth
+@apikey_can_create_domain
 @csrf.exempt
 def api_login_delete_zone(domain_name):
     pdns_api_url = Setting().get('pdns_api_url')
@@ -282,7 +298,8 @@ def api_login_delete_zone(domain_name):
     if not domain:
         abort(404)
 
-    if current_user.role.name not in ['Administrator', 'Operator']:
+    # if current_user.role.name not in ['Administrator', 'Operator']:
+    if g.apikey.role.name not in ['Administrator', 'Operator']:
         user_domains_obj_list = get_user_domains()
         user_domains_list = [item.name for item in user_domains_obj_list]
 
@@ -303,15 +320,15 @@ def api_login_delete_zone(domain_name):
             current_app.logger.debug("Request to powerdns API successful")
 
             domain = Domain()
-            domain_id = domain.get_id_by_name(domain_name)
+            # domain_id = domain.get_id_by_name(domain_name)
             domain.update()
 
-            history = History(msg='Delete zone {0}'.format(
-                utils.pretty_domain_name(domain_name)),
-                detail='',
-                created_by=current_user.username,
-                domain_id=domain_id)
-            history.add()
+            # history = History(msg='Delete zone {0}'.format(
+            #     utils.pretty_domain_name(domain_name)),
+            #     detail='',
+            #     created_by="Admin",
+            #     domain_id=domain_id)
+            # history.add()
 
     except Exception as e:
         current_app.logger.error('Error: {0}'.format(e))
@@ -321,7 +338,9 @@ def api_login_delete_zone(domain_name):
 
 
 @api_bp.route('/pdnsadmin/apikeys', methods=['POST'])
-@api_basic_auth
+# @api_basic_auth
+@apikey_auth
+@api_role_can_apikey('create apikey', allow_self=True)
 @csrf.exempt
 def api_generate_apikey():
     data = request.get_json()
@@ -373,8 +392,8 @@ def api_generate_apikey():
             msg = "One of supplied accounts does not exist"
             current_app.logger.error(msg)
             raise AccountNotExists(message=msg)
-
-    if current_user.role.name not in ['Administrator', 'Operator']:
+    if g.apikey.role.name not in ['Administrator', 'Operator']:
+    # if current_user.role.name not in ['Administrator', 'Operator']:
         # domain list of domain api key should be valid for
         # if not any domain error
         # role of api key, user cannot assign role above for api key
@@ -402,7 +421,7 @@ def api_generate_apikey():
             msg = "You don't have access to one of zones"
             current_app.logger.error(msg)
             raise DomainAccessForbidden(message=msg)
-
+    
     apikey = ApiKey(desc=description,
                     role_name=role_name,
                     domains=domain_obj_list,
@@ -662,8 +681,9 @@ def api_update_apikey(apikey_id):
 
 @api_bp.route('/pdnsadmin/users', defaults={'username': None})
 @api_bp.route('/pdnsadmin/users/<string:username>')
-@api_basic_auth
-@api_role_can('list users', allow_self=True)
+# @api_basic_auth
+@apikey_auth
+@api_role_can_apikey('list users', allow_self=True)
 def api_list_users(username=None):
     if username is None:
         user_list = [] or User.query.all()
@@ -676,8 +696,9 @@ def api_list_users(username=None):
 
 
 @api_bp.route('/pdnsadmin/users', methods=['POST'])
-@api_basic_auth
-@api_role_can('create users', allow_self=True)
+# @api_basic_auth
+@apikey_auth
+@api_role_can_apikey('create users', allow_self=True)
 @csrf.exempt
 def api_create_user():
     """
@@ -744,14 +765,15 @@ def api_create_user():
         raise UserCreateDuplicate(message=result['msg'])
 
     history = History(msg='Created user {0}'.format(user.username),
-                      created_by=current_user.username)
+                      created_by="API Key User ")
     history.add()
     return jsonify(user_single_schema.dump(user)), 201
 
 
 @api_bp.route('/pdnsadmin/users/<int:user_id>', methods=['PUT'])
-@api_basic_auth
-@api_role_can('update users', allow_self=True)
+# @api_basic_auth
+@apikey_auth
+@api_role_can_apikey('update users', allow_self=True)
 @csrf.exempt
 def api_update_user(user_id):
     """
@@ -817,24 +839,26 @@ def api_update_user(user_id):
             raise UserCreateFail(message=result['msg'])
 
     history = History(msg='Updated user {0}'.format(user.username),
-                      created_by=current_user.username)
+                      created_by='API Key User')
     history.add()
     return '', 204
 
 
 @api_bp.route('/pdnsadmin/users/<int:user_id>', methods=['DELETE'])
-@api_basic_auth
-@api_role_can('delete users')
+# @api_basic_auth
+@apikey_auth
+@api_role_can_apikey('delete users')
 @csrf.exempt
 def api_delete_user(user_id):
     user = User.query.get(user_id)
+    # cu = g.apikey
     if not user:
         current_app.logger.debug("User not found for id {}".format(user_id))
         abort(404)
-    if user.id == current_user.id:
-        current_app.logger.debug("Cannot delete self (id {})".format(user_id))
-        msg = "Cannot delete self"
-        raise UserDeleteFail(message=msg)
+    # if user.id == current_user.id:
+    #     current_app.logger.debug("Cannot delete self (id {})".format(user_id))
+    #     msg = "Cannot delete self"
+    #     raise UserDeleteFail(message=msg)
 
     # Remove account associations first
     user_accounts = Account.query.join(AccountUser).join(
@@ -850,18 +874,21 @@ def api_delete_user(user_id):
             user.username))
 
     history = History(msg='Delete user {0}'.format(user.username),
-                      created_by=current_user.username)
+                      created_by="API Key User")
     history.add()
     return '', 204
 
 
 @api_bp.route('/pdnsadmin/accounts', defaults={'account_name': None})
 @api_bp.route('/pdnsadmin/accounts/<string:account_name>')
-@api_basic_auth
-@api_role_can('list accounts')
+# @api_basic_auth
+@apikey_auth
+@api_role_can_apikey('list accounts')
 def api_list_accounts(account_name):
-    if current_user.role.name not in ['Administrator', 'Operator']:
-        msg = "{} role cannot list accounts".format(current_user.role.name)
+    if g.apikey.role.name not in ['Administrator', 'Operator']:
+        msg = "{} role cannot list accounts".format(g.apikey.role.name)
+    # if current_user.role.name not in ['Administrator', 'Operator']:
+    #     msg = "{} role cannot list accounts".format(current_user.role.name)
         raise NotEnoughPrivileges(message=msg)
     else:
         if account_name is None:
@@ -876,11 +903,14 @@ def api_list_accounts(account_name):
 
 
 @api_bp.route('/pdnsadmin/accounts', methods=['POST'])
-@api_basic_auth
+# @api_basic_auth
+@apikey_auth
 @csrf.exempt
 def api_create_account():
-    if current_user.role.name not in ['Administrator', 'Operator']:
-        msg = "{} role cannot create accounts".format(current_user.role.name)
+    if g.apikey.role.name not in ['Administrator', 'Operator']:
+    # if current_user.role.name not in ['Administrator', 'Operator']:
+        # msg = "{} role cannot create accounts".format(current_user.role.name)
+        msg = "{} role cannot create accounts".format(g.apikey.role.name)
         raise NotEnoughPrivileges(message=msg)
     data = request.get_json()
     name = data['name'] if 'name' in data else None
@@ -914,14 +944,15 @@ def api_create_account():
         raise AccountCreateFail(message=result['msg'])
 
     history = History(msg='Create account {0}'.format(account.name),
-                      created_by=current_user.username)
+                      created_by="Admin")
     history.add()
     return jsonify(account_single_schema.dump(account)), 201
 
 
 @api_bp.route('/pdnsadmin/accounts/<int:account_id>', methods=['PUT'])
-@api_basic_auth
-@api_role_can('update accounts')
+# @api_basic_auth
+@apikey_auth
+@api_role_can_apikey('update accounts')
 @csrf.exempt
 def api_update_account(account_id):
     data = request.get_json()
@@ -938,9 +969,10 @@ def api_update_account(account_id):
     if name and Account.sanitize_name(name) != account.name:
         msg = "Account name is immutable"
         raise AccountUpdateFail(message=msg)
-
-    if current_user.role.name not in ['Administrator', 'Operator']:
+    if g.apikey.role.name not in ['Administrator', 'Operator']:
         msg = "User role update accounts"
+    # if current_user.role.name not in ['Administrator', 'Operator']:
+    #     msg = "User role update accounts"
         raise NotEnoughPrivileges(message=msg)
 
     if description is not None:
@@ -956,14 +988,15 @@ def api_update_account(account_id):
     if not result['status']:
         raise AccountUpdateFail(message=result['msg'])
     history = History(msg='Update account {0}'.format(account.name),
-                      created_by=current_user.username)
+                      created_by="Admin")
     history.add()
     return '', 204
 
 
 @api_bp.route('/pdnsadmin/accounts/<int:account_id>', methods=['DELETE'])
-@api_basic_auth
-@api_role_can('delete accounts')
+# @api_basic_auth
+@apikey_auth
+@api_role_can_apikey('delete accounts')
 @csrf.exempt
 def api_delete_account(account_id):
     account_list = [] or Account.query.filter(Account.id == account_id).all()
@@ -988,15 +1021,16 @@ def api_delete_account(account_id):
         raise AccountDeleteFail(message=result['msg'])
 
     history = History(msg='Delete account {0}'.format(account.name),
-                      created_by=current_user.username)
+                      created_by="Admin")
     history.add()
     return '', 204
 
 
 @api_bp.route('/pdnsadmin/accounts/users/<int:account_id>', methods=['GET'])
 @api_bp.route('/pdnsadmin/accounts/<int:account_id>/users', methods=['GET'])
-@api_basic_auth
-@api_role_can('list account users')
+# @api_basic_auth
+@apikey_auth
+@api_role_can_apikey('list account users')
 def api_list_account_users(account_id):
     account = Account.query.get(account_id)
     if not account:
@@ -1012,8 +1046,9 @@ def api_list_account_users(account_id):
 @api_bp.route(
     '/pdnsadmin/accounts/<int:account_id>/users/<int:user_id>',
     methods=['PUT'])
-@api_basic_auth
-@api_role_can('add user to account')
+# @api_basic_auth
+@apikey_auth
+@api_role_can_apikey('add user to account')
 @csrf.exempt
 def api_add_account_user(account_id, user_id):
     account = Account.query.get(account_id)
@@ -1029,7 +1064,7 @@ def api_add_account_user(account_id, user_id):
     history = History(
         msg='Add {} user privileges on {}'.format(
             user.username, account.name),
-        created_by=current_user.username)
+        created_by="Admin API")
     history.add()
     return '', 204
 
@@ -1040,8 +1075,9 @@ def api_add_account_user(account_id, user_id):
 @api_bp.route(
     '/pdnsadmin/accounts/<int:account_id>/users/<int:user_id>',
     methods=['DELETE'])
-@api_basic_auth
-@api_role_can('remove user from account')
+# @api_basic_auth
+@apikey_auth
+@api_role_can_apikey('remove user from account')
 @csrf.exempt
 def api_remove_account_user(account_id, user_id):
     account = Account.query.get(account_id)
@@ -1063,7 +1099,7 @@ def api_remove_account_user(account_id, user_id):
     history = History(
         msg='Revoke {} user privileges on {}'.format(
             user.username, account.name),
-        created_by=current_user.username)
+        created_by="Admin API")
     history.add()
     return '', 204
 
@@ -1828,14 +1864,14 @@ def change_domain_status():
             raise Exception(sync_result['msg'])
 
         # Ghi lại lịch sử thay đổi
-        history = History(msg='Changed status of zone {0} to Active'.format(pretty_domain_name(domain_name)),
-                          detail=json.dumps({
-                              'domain': domain_name,
-                              'status': 'Active'
-                          }),
-                          created_by=current_user.username,
-                          domain_id=domain.id)
-        history.add()
+        # history = History(msg='Changed status of zone {0} to Active'.format(pretty_domain_name(domain_name)),
+        #                   detail=json.dumps({
+        #                       'domain': domain_name,
+        #                       'status': 'Active'
+        #                   }),
+        #                   created_by=current_user.username,
+        #                   domain_id=domain.id)
+        # history.add()
 
         return jsonify({'status': 'ok', 'msg': 'Domain status changed to Active and synced to PowerDNS.'}), 200
     except Exception as e:

@@ -19,8 +19,8 @@ def create_app(config=None):
     CORS(app)
     SWAGGER_URL = '/swagger'  
     API_URL = '/swagger.yaml'
-    with open('/opt/web/powerdns-admin/powerdnsadmin/swagger-spec.yaml', 'r') as yaml_file:
-        swagger_spec = yaml.safe_load(yaml_file)
+    # with open('/opt/web/powerdns-admin/powerdnsadmin/swagger-spec.yaml', 'r') as yaml_file:
+    #     swagger_spec = yaml.safe_load(yaml_file)
     swaggerui_blueprint = get_swaggerui_blueprint(
         SWAGGER_URL,
         API_URL,
