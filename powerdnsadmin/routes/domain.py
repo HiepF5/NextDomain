@@ -407,8 +407,9 @@ def add():
                         domain_template).all()
                     record_data = []
                     for template_record in template_records:
+                        processed_data = template_record.data.replace("{ZONE}", domain_name)
                         record_row = {
-                            'record_data': template_record.data,
+                            'record_data': processed_data,
                             'record_name': template_record.name,
                             'record_status': 'Active' if template_record.status else 'Disabled',
                             'record_ttl': template_record.ttl,

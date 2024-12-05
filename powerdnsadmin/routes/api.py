@@ -62,16 +62,21 @@ def is_custom_header_api():
         return g.apikey.description 
 
 def get_user_domains():
+    account_name = g.apikey.accounts[0].name
+    # domains = db.session.query(Domain) \
+    #     .outerjoin(Account, Domain.account_id == Account.id) \
+    #     .filter(Account.name == account_name) \
+    #     .all()
+    # return domains
     domains = db.session.query(Domain) \
-        .outerjoin(DomainUser, Domain.id == DomainUser.domain_id) \
         .outerjoin(Account, Domain.account_id == Account.id) \
-        .outerjoin(AccountUser, Account.id == AccountUser.account_id) \
         .filter(
-        db.or_(
-            DomainUser.user_id == current_user.id,
-            AccountUser.user_id == current_user.id
-        )).all()
+            Account.name == account_name,
+            Domain.is_user_created == 1
+        ) \
+        .all()
     return domains
+
 
 
 def get_user_apikeys(domain_name=None):
@@ -1253,7 +1258,7 @@ def api_get_zones(server_id):
             domain_list = [d['name']
                            for d in domain_schema.dump(g.apikey.domains)]
 
-            accounts_domains = [d.name for a in g.apikey.accounts for d in a.domains]
+            accounts_domains = [d.name for a in g.apikey.accounts for d in a.domains if d.is_user_created == 1]
             allowed_domains = set(domain_list + accounts_domains)
             current_app.logger.debug("Account zones: {}".format('/'.join(accounts_domains)))
             content = json.dumps([i for i in json.loads(resp.content)
