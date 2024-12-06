@@ -1863,9 +1863,12 @@ def change_domain_status():
     try:
         db.session.delete(domain)
         db.session.commit()
-
+        
+        account = Account.query.get(domain.account_id)
+        account_name = account.name if account else None
+            
         # Đồng bộ domain xuống PowerDNS bằng cách gọi hàm api_create_zone
-        sync_result = api_create_zone_internal(data)
+        sync_result = api_create_zone_internal(data, account_name)
         if not sync_result['status'] == 'ok':
             raise Exception(sync_result['msg'])
 
@@ -1885,9 +1888,9 @@ def change_domain_status():
         current_app.logger.error('Cannot change domain status. Error: {0}'.format(e))
         return jsonify({'status': 'error', 'msg': 'Cannot change domain status.'}), 500
     
-def api_create_zone_internal(data):
+def api_create_zone_internal(data, account_name):
     d = Domain()
-    account_name = g.apikey.accounts[0].name
+    # account_name = g.apikey.accounts[0].name
     result = d.add(domain_name=data.get('name'),
                            domain_type=data.get('type', 'Native'),
                            soa_edit_api=data.get('soa_edit_api', 'DEFAULT'),
