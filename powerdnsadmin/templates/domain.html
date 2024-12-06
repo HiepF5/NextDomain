@@ -36,7 +36,28 @@
                     <div class="card">
                         <div class="card-header">
                             <h3 class="card-title">Zone Editor</h3>
-                            <div class="card-tools">
+                            <div class="card-tools flex">
+                                <form id="applyTemplateForm" role="form" method="post" class="flex gap-2">
+                                    <div class="dropdown mt-2 mb-2 mr-2">
+                                        <button class="btn btn-primary dropdown-toggle" type="button" id="templateDropdown" data-toggle="dropdown"
+                                            aria-haspopup="true" aria-expanded="false">
+                                            <i class="fa-solid fa-toolbox"></i>
+                                            &nbsp; Select Template
+                                        </button>
+                                        <div class="dropdown-menu" aria-labelledby="templateDropdown">
+                                            {% for template in templates %}
+                                            <a class="dropdown-item" href="#" onclick="selectTemplate('{{ template.id }}', '{{ template.name }}')">{{
+                                                template.name }}</a>
+                                            {% endfor %}
+                                        </div>
+                                    </div>
+                                    <input type="hidden" name="template_id" id="selectedTemplateId">
+                                    <button type="button" class="btn btn-success mr-2 mt-2 mb-2" id="applyTemplateButton" onclick="submitTemplateForm()"
+                                        style="display: none;">
+                                        <i class="fa-solid fa-check"></i>
+                                        &nbsp; Apply Template
+                                    </button>
+                                </form>
                                 {% if current_user.role.name in ['Administrator', 'Operator'] %}
                                     <button type="button" title="Zone Settings"
                                             class="btn btn-primary btn-danger mt-2 mb-2"
@@ -45,6 +66,7 @@
                                         &nbsp;Zone Settings
                                     </button>
                                 {% endif %}
+                                
                                 {% if current_user.role.name in ['Administrator', 'Operator'] or allow_user_view_history %}
                                     <button type="button" title="Zone Changelog"
                                             class="btn btn-primary ml-2 mt-2 mb-2 button_changelog" id="{{ domain.name }}">
@@ -136,6 +158,7 @@
                     </div>
                 </div>
             </div>
+            
         </div>
     </section>
 {% endblock %}
@@ -225,6 +248,47 @@
             e.stopPropagation();
             window.location.href = "/domain/{{domain.name}}/changelog/" + record_name + "./" + record_type;
         }
+        function selectTemplate(templateId, templateName) {
+                document.getElementById('selectedTemplateId').value = templateId;
+                document.getElementById('templateDropdown').innerHTML = '<i class="fa-solid fa-toolbox"></i>&nbsp; ' + templateName;
+                document.getElementById('applyTemplateButton').style.display = 'block';
+            }
+
+        function submitTemplateForm() {
+                const domainName = '{{ domain.name }}';
+                const templateId = document.getElementById('selectedTemplateId').value;
+
+                fetch(`/domain/${domainName}/apply_template/${templateId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-API-Key': 'your-api-key'
+                    },
+                    body: JSON.stringify({ template_id: templateId })
+                })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.status === 'ok') {
+                            var modal = $("#modal_template");
+                            var info = " Template applied successfully";
+                            modal.find('.modal-body-template p').text(info);
+                            $('#modal_template').modal('show');
+                        } else {
+                            var modal = $("#modal_template");
+                            var info = " An error occurred while applying template";
+                            modal.find('.modal-body-template p').text(info);
+                            alert('Failed to apply template');
+                        }
+                        document.getElementById('applyTemplateButton').style.display = 'none';
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        var modal = $("#modal_template");
+                        var info = " An error occurred while applying template";
+                        modal.find('.modal-body-template p').text(info);
+                        $('#modal_template').modal('show');
+                    });
+            }
 
         // handle changelog button
         $(document.body).on("click", ".button_changelog", function (e) {
@@ -772,5 +836,24 @@
           </div>
         </div>
       </div>
+    </div>
+    <div class="modal fade" id="modal_template" tabindex="-1" role="dialog" aria-labelledby="modalSuccessLabel"
+        aria-hidden="true">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modalSuccessLabel">Success</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body modal-body-template">
+                    <p></p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" data-dismiss="modal" onclick=" location.reload();">OK</button>
+                </div>
+            </div>
+        </div>
     </div>
 {% endblock %}

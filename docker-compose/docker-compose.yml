@@ -44,7 +44,7 @@ services:
       - PDNS_version_string=anonymous
       - PDNS_default_ttl=1500
   web_app:
-    image: hiepf5/nextdomain:1.0
+    image: git.nextzenos.com/nextdomain/nextdomain:1.0
     container_name: powerdns_admin
     ports:
       - "8080:80"

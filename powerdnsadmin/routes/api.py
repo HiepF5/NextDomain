@@ -35,11 +35,12 @@ from ..lib.schema import (
     UserDetailedSchema,
 )
 from ..models import (
-    User, Domain, DomainUser, Account, AccountUser,ApiKeyAccount, History, Setting, ApiKey, Record,
+    User, Domain, DomainTemplate,DomainTemplateRecord, DomainUser, Account, AccountUser,ApiKeyAccount, History, Setting, ApiKey, Record,
     Role,
 )
 from ..lib.utils import to_idna
 from ..models.base import db
+from sqlalchemy.orm import joinedload
 
 api_bp = Blueprint('api', __name__, url_prefix='/api/v1')
 apilist_bp = Blueprint('apilist', __name__, url_prefix='/')
@@ -1897,4 +1898,121 @@ def api_create_zone_internal(data):
                            account_name=account_name)
     if result['status'] == 'ok':
         return {'status': 'ok', 'msg': 'Domain created successfully'}
-    
+
+
+
+@api_bp.route('/templates', methods=['GET'])
+@apikey_auth
+@csrf.exempt
+def get_templates():
+    try:
+        templates = DomainTemplate.query.options(joinedload(DomainTemplate.records)).all()
+
+        if not templates:
+            return jsonify({'status': 'ok', 'templates': []}), 200
+
+        templates_list = [
+            {
+                'id': template.id,
+                'name': template.name,
+                'description': template.description,
+                'records': [
+                    {
+                        'id': record.id,
+                        'name': record.name,
+                        'type': record.type,
+                        'data': record.data, 
+                        'ttl': record.ttl,
+                        'comment': record.comment,  
+                        'status': record.status
+                    } for record in template.records
+                ]
+            } for template in templates
+        ]
+        return jsonify({'status': 'ok', 'templates': templates_list}), 200
+
+    except Exception as e:
+        current_app.logger.error(f"Cannot get templates. Error: {e}")
+        return jsonify({'status': 'error', 'msg': 'Cannot get templates'}), 500
+
+@api_bp.route('/zones/<string:zone_name>/apply_template/<int:template_id>', methods=['POST'])
+@apikey_auth
+@csrf.exempt
+def apply_template_to_zone(zone_name, template_id):
+    try:
+        # Tìm template trong cơ sở dữ liệu
+        template = DomainTemplate.query.filter_by(id=template_id).first()
+        if not template:
+            return jsonify({'status': 'error', 'msg': 'Template not found'}), 404
+
+        # Tìm zone trong cơ sở dữ liệu
+        domain = Domain.query.filter_by(name=zone_name).first()
+        template_records = DomainTemplateRecord.query.filter(
+                        DomainTemplateRecord.template_id ==
+                        template_id).all()
+        if not domain:
+            return jsonify({'status': 'error', 'msg': 'Zone not found'}), 404
+        record_data = []
+        # Tạo các bản ghi trong zone theo template
+        for record in template_records:
+            processed_data = record.data.replace("{ZONE}", zone_name)
+            record_row = {
+                    'record_data': processed_data,
+                    'record_name': record.name,
+                    'record_type': record.type,
+                    'record_status': 'Active' if record.status else 'Inactive',
+                    'record_ttl': record.ttl,
+                    'comment_data': [{'content': record.comment, 'account': ''}]
+                }
+            record_data.append(record_row)
+            r = Record()
+            result = r.apply(zone_name, record_data)
+        if result['status'] == 'ok':
+            history = History(
+                msg='Applying template {0} to {1} successfully.'.format(template.name, zone_name),
+                detail=json.dumps({
+                    'domain': zone_name,
+                    'template': template.name,
+                    'add_rrsets': result['data'][0]['rrsets'],
+                    'del_rrsets': result['data'][1]['rrsets']
+                }),
+                created_by=current_user.username,
+                domain_id=domain.id)
+            history.add()
+            return jsonify({'status': 'ok', 'msg': 'Template applied successfully'}), 200
+        else:
+            return jsonify({'status': 'error', 'msg': 'Failed to apply template'}), 400
+    except Exception as e:
+        current_app.logger.error('Cannot apply template to zone. Error: {0}'.format(e))
+        return jsonify({'status': 'error', 'msg': 'Internal server error'}), 500
+@api_bp.route('/api/templates/<int:template_id>', methods=['GET'])
+@apikey_auth
+@csrf.exempt
+def get_template_by_id(template_id):
+    try:
+        # Tìm template trong cơ sở dữ liệu
+        template = DomainTemplate.query.options(joinedload(DomainTemplate.records)).filter_by(id=template_id).first()
+        if not template:
+            return jsonify({'status': 'error', 'msg': 'Template not found'}), 404
+
+        # Chuẩn bị dữ liệu template để trả về
+        template_data = {
+            'id': template.id,
+            'name': template.name,
+            'description': template.description,
+            'records': [
+                {
+                    'id': record.id,
+                    'name': record.name,
+                    'type': record.type,
+                    'data': record.data,
+                    'ttl': record.ttl,
+                    'comment': record.comment,
+                    'status': record.status
+                } for record in template.records
+            ]
+        }
+        return jsonify({'status': 'ok', 'template': template_data}), 200
+    except Exception as e:
+        current_app.logger.error(f"Cannot get template. Error: {e}")
+        return jsonify({'status': 'error', 'msg': 'Cannot get template'}), 500

@@ -7,6 +7,8 @@ import dns.reversename
 from distutils.version import StrictVersion
 from flask import Blueprint, render_template, make_response, url_for, current_app, request, redirect, abort, jsonify, g, session
 from flask_login import login_required, current_user, login_manager
+from sqlalchemy.orm import joinedload
+from .base import csrf
 
 from ..lib.utils import pretty_domain_name
 from ..lib.utils import pretty_json
@@ -126,8 +128,10 @@ def domain(domain_name):
         editable_records = forward_records_allow_to_edit
     else:
         editable_records = reverse_records_allow_to_edit
-
+    templates = DomainTemplate.query.options(joinedload(DomainTemplate.records)).all()
+    
     return render_template('domain.html',
+                           templates = templates,
                            domain=domain,
                            records=records,
                            editable_records=editable_records,
@@ -1110,3 +1114,58 @@ def admin_setdomainsetting(domain_name):
                     'msg':
                     'There is something wrong, please contact Administrator.'
                 }), 400)
+
+@domain_bp.route('/<path:domain_name>/apply_template/<int:template_id>', methods=['POST'])
+@login_required
+@csrf.exempt
+def apply_template_to_domain(domain_name, template_id):
+    current_app.logger.info(f"Received request to apply template {template_id} to domain {domain_name}")
+    try:
+        # Tìm template trong cơ sở dữ liệu
+        template = DomainTemplate.query.filter_by(id=template_id).first()
+        if not template:
+            current_app.logger.error(f"Template {template_id} not found")
+            return jsonify({'status': 'error', 'msg': 'Template not found'}), 404
+
+        # Tìm domain trong cơ sở dữ liệu
+        domain = Domain.query.filter_by(name=domain_name).first()
+        if not domain:
+            current_app.logger.error(f"Domain {domain_name} not found")
+            return jsonify({'status': 'error', 'msg': 'Domain not found'}), 404
+
+        # Tạo các bản ghi trong domain theo template
+        template_records = DomainTemplateRecord.query.filter_by(template_id=template_id).all()
+        record_data = []
+        for record in template_records:
+            processed_data = record.data.replace("{ZONE}", domain_name)
+            record_row = {
+                'record_data': processed_data,
+                'record_name': record.name,
+                'record_type': record.type,
+                'record_status': 'Active' if record.status else 'Inactive',
+                'record_ttl': record.ttl,
+                'comment_data': [{'content': record.comment, 'account': ''}]
+            }
+            record_data.append(record_row)
+
+        r = Record()
+        result = r.apply(domain_name, record_data)
+        if result['status'] == 'ok':
+            history = History(
+                msg='Applying template {0} to {1} successfully.'.format(template.name, domain_name),
+                detail=json.dumps({
+                    'domain': domain_name,
+                    'template': template.name,
+                    'add_rrsets': result['data'][0]['rrsets'],
+                    'del_rrsets': result['data'][1]['rrsets']
+                }),
+                created_by=current_user.username,
+                domain_id=domain.id)
+            history.add()
+            return jsonify({'status': 'ok', 'msg': 'Template applied successfully'}), 200
+        else:
+            current_app.logger.error(f"Failed to apply template {template_id} to domain {domain_name}")
+            return jsonify({'status': 'error', 'msg': 'Failed to apply template'}), 400
+    except Exception as e:
+        current_app.logger.error(f"Cannot apply template to domain. Error: {e}")
+        return jsonify({'status': 'error', 'msg': 'Internal server error'}), 500
