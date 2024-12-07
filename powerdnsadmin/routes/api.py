@@ -2019,3 +2019,31 @@ def get_template_by_id(template_id):
     except Exception as e:
         current_app.logger.error(f"Cannot get template. Error: {e}")
         return jsonify({'status': 'error', 'msg': 'Cannot get template'}), 500
+@api_bp.route('/delete-pending-domain', methods=['DELETE'])
+@apikey_auth
+@csrf.exempt
+def delete_pending_domain():
+    data = request.json
+    domain_name = data.get('name').rstrip('.')
+
+    if not domain_name:
+        return jsonify({'status': 'error', 'msg': 'Domain name is required.'}), 400
+
+    # Tìm domain trong cơ sở dữ liệu
+    domain = Domain.query.filter_by(name=domain_name).first()
+    if not domain:
+        return jsonify({'status': 'error', 'msg': 'Domain not found.'}), 404
+
+    # Kiểm tra trạng thái hiện tại của domain
+    if domain.status != 'Pending':
+        return jsonify({'status': 'error', 'msg': 'Domain status is not Pending.'}), 400
+
+    # Xóa domain
+    try:
+        db.session.delete(domain)
+        db.session.commit()
+        return jsonify({'status': 'ok', 'msg': 'Domain deleted successfully'}), 200
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error('Cannot delete domain. Error: {0}'.format(e))
+        return jsonify({'status': 'error', 'msg': 'Cannot delete domain'}), 500
