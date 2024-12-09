@@ -14,6 +14,12 @@
         {% if domain.status == 'Pending' %}
         <span class="badge badge-warning">Pending</span>
         {% endif %}
+        {% if domain.status == 'Deactive' %}
+        <span class="badge badge-danger">Deactive</span>
+        {% endif %}
+        {% if domain.status == 'Active' %}
+        <span class="badge badge-success">Active</span>
+        {% endif %}
     </td>
 {% endmacro %}
 

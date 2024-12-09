@@ -167,8 +167,8 @@ class Domain(db.Model):
                 for domain_name in should_removed_db_domain:
                     domain = db.session.query(Domain).filter(Domain.name == domain_name).first()
                     if domain:
-                        if domain.status == 'Pending':
-                            current_app.logger.info(f"Domain {domain_name} has status 'Pending', skipping deletion.")
+                        if domain.status == 'Pending' or domain.status == 'Deactive':
+                            current_app.logger.info(f"Domain {domain_name} has status 'Pending or Deactive', skipping deletion.")
                             continue
                     self.delete_domain_from_pdnsadmin(domain_name, do_commit=False)
             except Exception as e:

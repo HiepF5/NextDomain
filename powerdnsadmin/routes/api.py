@@ -287,60 +287,80 @@ def api_login_list_zones():
 @api_bp.route('/pdnsadmin/zones/<string:domain_name>', methods=['DELETE'])
 # @api_basic_auth
 @apikey_auth
-@apikey_can_create_domain
+# @apikey_can_remove_domain
 @csrf.exempt
 def api_login_delete_zone(domain_name):
-    pdns_api_url = Setting().get('pdns_api_url')
-    pdns_api_key = Setting().get('pdns_api_key')
-    pdns_version = Setting().get('pdns_version')
-    api_uri_with_prefix = utils.pdns_api_extended_uri(pdns_version)
-    api_full_uri = api_uri_with_prefix + '/servers/localhost/zones'
-    api_full_uri += '/' + domain_name
-    headers = {}
-    headers['X-API-Key'] = pdns_api_key
+    if not domain_name:
+        return jsonify({'status': 'error', 'msg': 'Domain name is required.'}), 400
 
-    domain = Domain.query.filter(Domain.name == domain_name)
-
+    # Tìm domain trong cơ sở dữ liệu
+    domain = Domain.query.filter_by(name=domain_name).first()
     if not domain:
-        abort(404)
+        return jsonify({'status': 'error', 'msg': 'Domain not found.'}), 404
 
-    # if current_user.role.name not in ['Administrator', 'Operator']:
-    if g.apikey.role.name not in ['Administrator', 'Operator']:
-        user_domains_obj_list = get_user_domains()
-        user_domains_list = [item.name for item in user_domains_obj_list]
+    # Kiểm tra trạng thái hiện tại của domain
+    if domain.status == 'Pending' or domain.status == 'Deactive':
+        # Xóa domain từ cơ sở dữ liệu
+        try:
+            db.session.delete(domain)
+            db.session.commit()
+            return jsonify({'status': 'ok', 'msg': 'Domain deleted successfully'}), 200
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error('Cannot delete domain. Error: {0}'.format(e))
+            return jsonify({'status': 'error', 'msg': 'Cannot delete domain'}), 500
+    elif domain.status == 'Active':
+        pdns_api_url = Setting().get('pdns_api_url')
+        pdns_api_key = Setting().get('pdns_api_key')
+        pdns_version = Setting().get('pdns_version')
+        api_uri_with_prefix = utils.pdns_api_extended_uri(pdns_version)
+        api_full_uri = api_uri_with_prefix + '/servers/localhost/zones'
+        api_full_uri += '/' + domain_name
+        headers = {}
+        headers['X-API-Key'] = pdns_api_key
 
-        if domain_name not in user_domains_list:
-            raise DomainAccessForbidden()
+        domain = Domain.query.filter(Domain.name == domain_name)
 
-    msg_str = "Sending request to powerdns API {0}"
-    current_app.logger.debug(msg_str.format(domain_name))
+        if not domain:
+            abort(404)
 
-    try:
-        resp = utils.fetch_remote(urljoin(pdns_api_url, api_full_uri),
-                                  method='DELETE',
-                                  headers=headers,
-                                  accept='application/json; q=1',
-                                  verify=Setting().get('verify_ssl_connections'))
+        # if current_user.role.name not in ['Administrator', 'Operator']:
+        if g.apikey.role.name not in ['Administrator', 'Operator']:
+            user_domains_obj_list = get_user_domains()
+            user_domains_list = [item.name for item in user_domains_obj_list]
 
-        if resp.status_code == 204:
-            current_app.logger.debug("Request to powerdns API successful")
+            if domain_name not in user_domains_list:
+                raise DomainAccessForbidden()
 
-            domain = Domain()
-            # domain_id = domain.get_id_by_name(domain_name)
-            domain.update()
+        msg_str = "Sending request to powerdns API {0}"
+        current_app.logger.debug(msg_str.format(domain_name))
 
-            # history = History(msg='Delete zone {0}'.format(
-            #     utils.pretty_domain_name(domain_name)),
-            #     detail='',
-            #     created_by="Admin",
-            #     domain_id=domain_id)
-            # history.add()
+        try:
+            resp = utils.fetch_remote(urljoin(pdns_api_url, api_full_uri),
+                                    method='DELETE',
+                                    headers=headers,
+                                    accept='application/json; q=1',
+                                    verify=Setting().get('verify_ssl_connections'))
 
-    except Exception as e:
-        current_app.logger.error('Error: {0}'.format(e))
-        abort(500)
+            if resp.status_code == 204:
+                current_app.logger.debug("Request to powerdns API successful")
 
-    return resp.content, resp.status_code, resp.headers.items()
+                domain = Domain()
+                # domain_id = domain.get_id_by_name(domain_name)
+                domain.update()
+
+                # history = History(msg='Delete zone {0}'.format(
+                #     utils.pretty_domain_name(domain_name)),
+                #     detail='',
+                #     created_by="Admin",
+                #     domain_id=domain_id)
+                # history.add()
+
+        except Exception as e:
+            current_app.logger.error('Error: {0}'.format(e))
+            abort(500)
+
+        return resp.content, resp.status_code, resp.headers.items()
 
 
 @api_bp.route('/pdnsadmin/apikeys', methods=['POST'])
@@ -1081,7 +1101,7 @@ def api_add_account_user(account_id, user_id):
 @api_bp.route(
     '/pdnsadmin/accounts/<int:account_id>/users/<int:user_id>',
     methods=['DELETE'])
-# @api_basic_auth
+# @api_basic_auth/servers/:server_id/zones/:zone_id
 @apikey_auth
 @api_role_can_apikey('remove user from account')
 @csrf.exempt
@@ -1904,6 +1924,7 @@ def api_create_zone_internal(data, account_name):
 
 
 
+
 @api_bp.route('/templates', methods=['GET'])
 @apikey_auth
 @csrf.exempt
@@ -2047,3 +2068,222 @@ def delete_pending_domain():
         db.session.rollback()
         current_app.logger.error('Cannot delete domain. Error: {0}'.format(e))
         return jsonify({'status': 'error', 'msg': 'Cannot delete domain'}), 500
+@api_bp.route('/delete-domain', methods=['DELETE'])
+@apikey_auth
+@csrf.exempt
+def delete_domain():
+    data = request.json
+    domain_name = data.get('name').rstrip('.')
+
+    if not domain_name:
+        return jsonify({'status': 'error', 'msg': 'Domain name is required.'}), 400
+
+    # Tìm domain trong cơ sở dữ liệu
+    domain = Domain.query.filter_by(name=domain_name).first()
+    if not domain:
+        return jsonify({'status': 'error', 'msg': 'Domain not found.'}), 404
+
+    # Kiểm tra trạng thái hiện tại của domain
+    if domain.status != 'Active':
+        return jsonify({'status': 'error', 'msg': 'Domain status is not Active.'}), 400
+
+    # Xóa domain
+    try:
+        db.session.delete(domain)
+        db.session.commit()
+        return jsonify({'status': 'ok', 'msg': 'Domain deleted successfully'}), 200
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error('Cannot delete domain. Error: {0}'.format(e))
+        return jsonify({'status': 'error', 'msg': 'Cannot delete domain'}), 500
+@api_bp.route('/api/templates/<int:template_id>', methods=['DELETE'])
+@apikey_auth
+@csrf.exempt
+def delete_template(template_id):
+    try:
+        # Tìm template trong cơ sở dữ liệu
+        template = DomainTemplate.query.filter_by(id=template_id).first()
+        if not template:
+            return jsonify({'status': 'error', 'msg': 'Template not found'}), 404
+
+        # Xóa template
+        db.session.delete(template)
+        db.session.commit()
+        return jsonify({'status': 'ok', 'msg': 'Template deleted successfully'}), 200
+    except Exception as e:
+        current_app.logger.error(f"Cannot delete template. Error: {e}")
+        return jsonify({'status': 'error', 'msg': 'Cannot delete template'}), 500
+@api_bp.route('/api/templates', methods=['POST'])
+@apikey_auth
+@csrf.exempt
+def create_template():
+    try:
+        data = request.json
+        name = data.get('name')
+        description = data.get('description')
+        records = data.get('records')
+
+        if not name:
+            return jsonify({'status': 'error', 'msg': 'Template name is required'}), 400
+
+        if not records:
+            return jsonify({'status': 'error', 'msg': 'Records are required'}), 400
+
+        # Tạo template mới
+        template = DomainTemplate(name=name, description=description)
+        db.session.add(template)
+        db.session.commit()
+
+        # Tạo các bản ghi cho template
+        for record in records:
+            template_record = DomainTemplateRecord(
+                template_id=template.id,
+                name=record.get('name'),
+                type=record.get('type'),
+                data=record.get('data'),
+                ttl=record.get('ttl'),
+                comment=record.get('comment'),
+                status=record.get('status', True)
+            )
+            db.session.add(template_record)
+
+        db.session.commit()
+        return jsonify({'status': 'ok', 'msg': 'Template created successfully'}), 201
+    except Exception as e:
+        current_app.logger.error(f"Cannot create template. Error: {e}")
+        return jsonify({'status': 'error', 'msg': 'Cannot create template'}), 500
+@api_bp.route('/api/templates/<int:template_id>', methods=['PATCH'])
+@apikey_auth
+@csrf.exempt
+def update_template(template_id):
+    try:
+        data = request.json
+        name = data.get('name')
+        description = data.get('description')
+        records = data.get('records')
+
+        # Tìm template trong cơ sở dữ liệu
+        template = DomainTemplate.query.filter_by(id=template_id).first()
+        if not template:
+            return jsonify({'status': 'error', 'msg': 'Template not found'}), 404
+
+        if name:
+            template.name = name
+
+        if description:
+            template.description = description
+
+        # Xóa các bản ghi cũ
+        DomainTemplateRecord.query.filter_by(template_id=template_id).delete()
+
+        # Tạo các bản ghi mới
+        for record in records:
+            template_record = DomainTemplateRecord(
+                template_id=template.id,
+                name=record.get('name'),
+                type=record.get('type'),
+                data=record.get('data'),
+                ttl=record.get('ttl'),
+                comment=record.get('comment'),
+                status=record.get('status', True)
+            )
+            db.session.add(template_record)
+
+        db.session.commit()
+        return jsonify({'status': 'ok', 'msg': 'Template updated successfully'}), 200
+    except Exception as e:
+        current_app.logger.error(f"Cannot update template. Error: {e}")
+        return jsonify({'status': 'error', 'msg': 'Cannot update template'}), 500
+    
+@api_bp.route('/pdnsadmin/zones/<string:status>/<string:domain_name>', methods=['POST'])
+@apikey_auth
+@csrf.exempt
+def change_domain_status_dynamic(status, domain_name):
+    domain_name = domain_name.rstrip('.')
+
+    if not domain_name:
+        return jsonify({'status': 'error', 'msg': 'Domain name is required.'}), 400
+
+    # Tìm domain trong cơ sở dữ liệu
+    domain = Domain.query.filter_by(name=domain_name).first()
+    if not domain:
+        return jsonify({'status': 'error', 'msg': 'Domain not found.'}), 404
+
+    # Kiểm tra trạng thái hiện tại của domain
+    current_status = domain.status
+    account = Account.query.get(domain.account_id)
+    account_name = account.name if account else None
+    try:
+        if current_status == 'Pending' and status == 'Active':
+            # Thay đổi trạng thái của domain thành Active và đồng bộ với PowerDNS
+            # domain.status = 'Active'
+            db.session.delete(domain)
+            db.session.commit()
+
+            # Đồng bộ domain xuống PowerDNS bằng cách gọi hàm api_create_zone_internal
+            sync_result = api_create_zone_internal({'name': domain_name}, account_name)
+            if not sync_result['status'] == 'ok':
+                raise Exception(sync_result['msg'])
+
+            return jsonify({'status': 'ok', 'msg': 'Domain status changed to Active and synced to PowerDNS.'}), 200
+
+        elif current_status == 'Deactive' and status == 'Active':
+            # Thay đổi trạng thái của domain thành Active và đồng bộ với PowerDNS
+            domain.status = 'Active'
+            db.session.commit()
+
+           
+
+            # Đồng bộ domain xuống PowerDNS bằng cách gọi hàm api_create_zone_internal
+            sync_result = api_create_zone_internal({'name': domain_name}, account_name)
+            if not sync_result['status'] == 'ok':
+                raise Exception(sync_result['msg'])
+
+            return jsonify({'status': 'ok', 'msg': 'Domain status changed to Active and synced to PowerDNS.'}), 200
+        elif (current_status == 'Pending' and status == 'Deactive') or \
+             (current_status == 'Deactive' and status == 'Pending') :
+            # Xóa domain từ PowerDNS và thay đổi trạng thái
+            domain.status = status
+            db.session.commit()
+            return jsonify({'status': 'ok', 'msg': 'Domain status changed to {0} PowerDNS Admin.'.format(status)}), 200
+             
+        elif (current_status == 'Active' and status in ['Pending', 'Deactive']):
+            
+            # Xóa domain từ PowerDNS và thay đổi trạng thái
+            api_login_delete_zone(domain_name)
+            d = Domain()
+            domain_type = 'Native'
+            soa_edit_api = 'DEFAULT'
+            if domain_type == 'slave':
+                if request.form.getlist('domain_master_address'):
+                    domain_master_string = request.form.getlist(
+                        'domain_master_address')[0]
+                    domain_master_string = domain_master_string.replace(
+                        ' ', '')
+                    domain_master_ips = domain_master_string.split(',')
+            else:
+                domain_master_ips = []
+
+            result = d.add_personal_domain(domain_name=domain_name,
+                            domain_type=domain_type,
+                            soa_edit_api=soa_edit_api,
+                            domain_master_ips=domain_master_ips,
+                            is_user_created=1,
+                            is_domain_free=0,
+                            status=status,
+                            account_name=account_name)
+            if result['status'] == 'ok':
+                return jsonify({'status': 'ok', 'msg': 'Domain status changed to {0} and deleted from PowerDNS.'.format(status)}), 200
+            else:
+                return jsonify({'status': 'error', 'msg': 'Cannot change domain status.'}), 500
+
+        else:
+            return jsonify({'status': 'error', 'msg': 'Invalid status change.'}), 400
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error('Cannot change domain status. Error: {0}'.format(e))
+        return jsonify({'status': 'error', 'msg': 'Cannot change domain status.'}), 500
+
+
+    
