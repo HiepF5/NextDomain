@@ -80,7 +80,7 @@
                     <i class="fa-solid fa-pencil"></i>&nbsp;Edit Records
                 </button> -->
 
-                {% if current_user.role.name in ['Administrator', 'Operator'] %}
+                {% if current_user.role.name in ['Administrator', 'Operator'] and domain.status == "Active"%}
                     <button class="dropdown-item btn-danger" type="button"
                             onclick="window.location.href='{{ url_for('domain.setting', domain_name=domain.name) }}'">
                         <i class="fa-solid fa-cog"></i>&nbsp;Zone Settings
@@ -90,7 +90,7 @@
                     </button>
                 {% endif %}
 
-                {% if current_user.role.name in ['Administrator', 'Operator']  %}
+                {% if current_user.role.name in ['Administrator', 'Operator'] and domain.status == "Active" %}
                     <button class="dropdown-item btn-primary" type="button"
                             onclick="window.location.href='{{ url_for('domain.changelog', domain_name=domain.name) }}'">
                         <i class="fa-solid fa-history" aria-hidden="true"></i>&nbsp;Zone Changelog
