@@ -1,6 +1,6 @@
 {% macro name(domain) %}
-    <a href="{{ '#' if domain.status == 'Pending' else url_for('domain.domain', domain_name=domain.name) }}"
-        class="{{ 'pending-domain' if domain.status == 'Pending' else '' }}" data-domain="{{ domain.name }}">
+    <a href="{{ url_for('domain.domain', domain_name=domain.name) if domain.status == 'Active' else '#' }}"
+        class="{{ '' if domain.status == 'Active' else 'pending-domain' }}" data-domain="{{ domain.name }}" data-status="{{domain.status}}">
         <strong>{{ domain.name | pretty_domain_name }}</strong>
     </a>
     <td>
@@ -12,13 +12,16 @@
                     {% endif %}
             "></span>
         {% if domain.status == 'Pending' %}
-        <span class="badge badge-warning">Pending</span>
+        <span class="badge badge-warning">Pending</span> 
         {% endif %}
         {% if domain.status == 'Deactive' %}
         <span class="badge badge-danger">Deactive</span>
         {% endif %}
         {% if domain.status == 'Active' %}
         <span class="badge badge-success">Active</span>
+        {% endif %}
+        {% if domain.status == 'Default' %}
+        <span class="badge badge-secondary">Default</span>
         {% endif %}
     </td>
 {% endmacro %}
@@ -65,10 +68,17 @@
                 <i class="fa-solid fa-bars"></i>
             </button>
             <div class="dropdown-menu" aria-labelledby="dropdownMenu">
-                <button class="dropdown-item btn-success" type="button"
-                        onclick="window.location.href='{{ url_for('domain.domain', domain_name=domain.name) }}'">
+                {% if domain.status == 'Active' %}
+                    <button class="dropdown-item btn-primary" type="button"
+                            onclick="window.location.href='{{ url_for('domain.domain', domain_name=domain.name) }}'">
+                        <i class="fa-solid fa-pencil"></i>&nbsp;Edit Records
+                    </button>
+                {% endif %}
+
+                <!-- <button class="dropdown-item btn-success" type="button"
+                        onclick="window.location.href='{{ url_for('domain.domain', domain_name=domain.name) if domain.status == 'Active' else '#' }}'">
                     <i class="fa-solid fa-pencil"></i>&nbsp;Edit Records
-                </button>
+                </button> -->
 
                 {% if current_user.role.name in ['Administrator', 'Operator'] %}
                     <button class="dropdown-item btn-danger" type="button"
@@ -80,18 +90,28 @@
                     </button>
                 {% endif %}
 
-                {% if current_user.role.name in ['Administrator', 'Operator'] or allow_user_view_history %}
+                {% if current_user.role.name in ['Administrator', 'Operator']  %}
                     <button class="dropdown-item btn-primary" type="button"
                             onclick="window.location.href='{{ url_for('domain.changelog', domain_name=domain.name) }}'">
                         <i class="fa-solid fa-history" aria-hidden="true"></i>&nbsp;Zone Changelog
                     </button>
                 {% endif %}
-
-                {% if current_user.role.name in ['Administrator', 'Operator'] or allow_user_remove_domain %}
+                <!-- {% if current_user.role.name in ['Administrator', 'Operator'] or allow_user_view_history %}
+                <button class="dropdown-item btn-primary" type="button"
+                    onclick="window.location.href='{{ url_for('domain.changelog', domain_name=domain.name) }}'">
+                    <i class="fa-solid fa-history" aria-hidden="true"></i>&nbsp;Zone Changelog
+                </button>
+                {% endif %} -->
+                {% if current_user.role.name in ['Administrator', 'Operator', "User"] and domain.status != "Default" %}
                     <div class="dropdown-divider"></div>
                     <button type="button" class="dropdown-item btn-secondary button_delete"
                             onclick="window.location.href='{{ url_for('domain.remove') }}'">
                         <span style="color: red;"><i class="fa-solid fa-trash"></i>&nbsp;Remove Zone</span>
+                    </button>
+                {% endif %}
+                {% if current_user.role.name in ['Administrator', 'Operator', "User"] and domain.status == "Default" %}
+                    <button type="button" class="dropdown-item btn-secondary" disabled>
+                        <span style="color: gray;"><i class="fa-solid fa-ban"></i>&nbsp;Action Not Allowed</span>
                     </button>
                 {% endif %}
             </div>

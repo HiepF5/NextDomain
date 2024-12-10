@@ -247,10 +247,31 @@
             e.stopPropagation();
 
             var domainName = $(this).data('domain');
+            var domainStatus = $(this).data('status'); 
             console.log('Domain name:', domainName);  // Debug line
 
             $('#modalDomainName').text(domainName);
+            $('#status-domain').text(domainStatus);
+            $('#status-domain-title').text(domainStatus);
             $('#pendingDomainModal').modal('show');
+            var statusSpan = document.getElementById('status-domain');
+            if (domainStatus === 'Active') {
+                statusSpan.classList.add('badge-success');
+                statusSpan.classList.remove('badge-warning', 'badge-danger');
+                statusSpan.textContent = 'Active';
+            } else if (domainStatus === 'Pending') {
+                statusSpan.classList.add('badge-warning');
+                statusSpan.classList.remove('badge-success', 'badge-danger');
+                statusSpan.textContent = 'Pending';
+            } else if (domainStatus === 'Deactive') {
+                statusSpan.classList.add('badge-danger');
+                statusSpan.classList.remove('badge-success', 'badge-warning');
+                statusSpan.textContent = 'Deactive';
+            } else {
+                statusSpan.classList.add('badge-secondary');
+                statusSpan.classList.remove('badge-success', 'badge-warning', 'badge-danger');
+                statusSpan.textContent = 'Default';
+            }
         });
     });
 </script>
@@ -351,14 +372,14 @@
     <div class="modal-dialog" role="document">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title" id="pendingDomainModalLabel">Pending Domain Details</h5>
+                <h5 class="modal-title" id="pendingDomainModalLabel"><span id="status-domain-title"></span> Domain Details</h5>
                 <button type="button" class="close" data-dismiss="modal" aria-label="Close">
                     <span aria-hidden="true">&times;</span>
                 </button>
             </div>
             <div class="modal-body">
                 <p>Domain Name: <span id="modalDomainName"></span></p>
-                <p>Status: <span class="badge badge-warning">Pending</span></p>
+                <p>Status: <span id="status-domain" class="badge"></span></p>
                 <p>This domain is currently pending approval. Please wait for administrator verification.</p>
             </div>
             <div class="modal-footer">

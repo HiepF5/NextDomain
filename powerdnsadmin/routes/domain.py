@@ -383,7 +383,7 @@ def add():
                            domain_master_ips=domain_master_ips,
                            is_user_created=0,
                            is_domain_free=is_domain_free,
-                           status='Active',
+                           status='Default',
                            account_name=account_name
                            )
             if result['status'] == 'ok':

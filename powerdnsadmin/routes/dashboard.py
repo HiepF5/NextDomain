@@ -93,8 +93,7 @@ def domains_custom(tab_id):
                 db.or_(
                     DomainUser.user_id == current_user.id,
                     AccountUser.user_id == current_user.id
-                ),
-                Domain.is_user_created == 1
+                )
             )
 
     template = current_app.jinja_env.get_template("dashboard_domain.html")

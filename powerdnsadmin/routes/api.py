@@ -2096,23 +2096,6 @@ def delete_domain():
         db.session.rollback()
         current_app.logger.error('Cannot delete domain. Error: {0}'.format(e))
         return jsonify({'status': 'error', 'msg': 'Cannot delete domain'}), 500
-@api_bp.route('/api/templates/<int:template_id>', methods=['DELETE'])
-@apikey_auth
-@csrf.exempt
-def delete_template(template_id):
-    try:
-        # Tìm template trong cơ sở dữ liệu
-        template = DomainTemplate.query.filter_by(id=template_id).first()
-        if not template:
-            return jsonify({'status': 'error', 'msg': 'Template not found'}), 404
-
-        # Xóa template
-        db.session.delete(template)
-        db.session.commit()
-        return jsonify({'status': 'ok', 'msg': 'Template deleted successfully'}), 200
-    except Exception as e:
-        current_app.logger.error(f"Cannot delete template. Error: {e}")
-        return jsonify({'status': 'error', 'msg': 'Cannot delete template'}), 500
 @api_bp.route('/api/templates', methods=['POST'])
 @apikey_auth
 @csrf.exempt
@@ -2152,6 +2135,25 @@ def create_template():
     except Exception as e:
         current_app.logger.error(f"Cannot create template. Error: {e}")
         return jsonify({'status': 'error', 'msg': 'Cannot create template'}), 500
+    
+@api_bp.route('/api/templates/<int:template_id>', methods=['DELETE'])
+@apikey_auth
+@csrf.exempt
+def delete_template(template_id):
+    try:
+        # Tìm template trong cơ sở dữ liệu
+        template = DomainTemplate.query.filter_by(id=template_id).first()
+        if not template:
+            return jsonify({'status': 'error', 'msg': 'Template not found'}), 404
+
+        # Xóa template
+        db.session.delete(template)
+        db.session.commit()
+        return jsonify({'status': 'ok', 'msg': 'Template deleted successfully'}), 200
+    except Exception as e:
+        current_app.logger.error(f"Cannot delete template. Error: {e}")
+        return jsonify({'status': 'error', 'msg': 'Cannot delete template'}), 500
+
 @api_bp.route('/api/templates/<int:template_id>', methods=['PATCH'])
 @apikey_auth
 @csrf.exempt
