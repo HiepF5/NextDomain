@@ -292,11 +292,18 @@ def api_login_list_zones():
 def api_login_delete_zone(domain_name):
     if not domain_name:
         return jsonify({'status': 'error', 'msg': 'Domain name is required.'}), 400
+    list_account = g.apikey.accounts
 
     # Tìm domain trong cơ sở dữ liệu
     domain = Domain.query.filter_by(name=domain_name).first()
     if not domain:
         return jsonify({'status': 'error', 'msg': 'Domain not found.'}), 404
+
+    # Kiểm tra xem domain có thuộc về một trong các tài khoản trong list_account hay không
+    if domain.account_id not in [account.id for account in list_account]:
+        return jsonify({'status': 'error', 'msg': 'You do not have permission to delete this domain.'}), 403
+
+    # Tiếp tục xử lý nếu có quyền xóa
 
     # Kiểm tra trạng thái hiện tại của domain
     if domain.status == 'Pending' or domain.status == 'Deactive':
@@ -1288,13 +1295,19 @@ def api_get_zones(server_id):
         else:
             zones = json.loads(resp.content)
             domain_dict = {
-                domain.name: domain.updated_at.strftime('%Y-%m-%d %H:%M:%S') if domain.updated_at else "No Update"
+                domain.name: {
+                    'updated_at': domain.updated_at.strftime('%Y-%m-%d %H:%M:%S') if domain.updated_at else "No Update",
+                    'status': domain.status,
+                    'update_time_deactive': domain.update_time_deactive.strftime('%Y-%m-%d %H:%M:%S') if domain.update_time_deactive else "No Update"
+                }
                 for domain in Domain.query.all()
             }
             for zone in zones:
                 domain_name = zone.get('name', '').rstrip('.')
                 if domain_name in domain_dict:
-                    zone['updated_at'] = domain_dict[domain_name]
+                    zone['updated_at'] = domain_dict[domain_name]['updated_at']
+                    zone['status'] = domain_dict[domain_name]['status']
+                    zone['update_time_deactive'] = domain_dict[domain_name]['update_time_deactive']
             zones_sorted = sorted(zones, key=lambda x: x['updated_at'], reverse=True)
             zones_with_updated_at = json.dumps(zones_sorted)
             return zones_with_updated_at, resp.status_code, resp.headers.items()

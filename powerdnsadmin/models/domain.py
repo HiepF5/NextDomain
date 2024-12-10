@@ -32,6 +32,7 @@ class Domain(db.Model):
     status = db.Column(db.String(255), default='Active')
     create_at = db.Column(db.DateTime, server_default=db.func.now())
     updated_at = db.Column(db.DateTime, onupdate=func.now())
+    update_time_deactive = db.Column(db.DateTime)
     account_id = db.Column(db.Integer, db.ForeignKey('account.id'))
     account = db.relationship("Account", back_populates="domains")
     settings = db.relationship('DomainSetting', back_populates='domain')
@@ -233,6 +234,7 @@ class Domain(db.Model):
             domain.dnssec = 1 if data['dnssec'] else 0
             domain.account_id = account_id
             domain.updated_at = func.now()
+            
             domain.is_user_created = is_user_created
             domain.is_domain_free = is_domain_free
             try:

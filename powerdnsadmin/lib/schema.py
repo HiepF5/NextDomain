@@ -4,6 +4,9 @@ from lima import fields, Schema
 class DomainSchema(Schema):
     id = fields.Integer()
     name = fields.String()
+    status = fields.String()
+    update_time_deactive = fields.DateTime()
+    updated_at = fields.DateTime()
 
 
 class RoleSchema(Schema):
