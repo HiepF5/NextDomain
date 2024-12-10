@@ -1086,6 +1086,7 @@ class Domain(db.Model):
                 d.is_user_created = is_user_created
                 d.is_domain_free = is_domain_free
                 d.status = status
+                d.update_time_deactive =  func.now()
                 d.create_at = func.now()
                 d.updated_at = func.now()
                 db.session.add(d)

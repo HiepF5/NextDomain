@@ -292,18 +292,18 @@ def api_login_list_zones():
 def api_login_delete_zone(domain_name):
     if not domain_name:
         return jsonify({'status': 'error', 'msg': 'Domain name is required.'}), 400
-    list_account = g.apikey.accounts
+    # if g.apikey.role.name not in ['Administrator', 'Operator']:
+    # list_account = g.apikey.accounts
 
     # Tìm domain trong cơ sở dữ liệu
     domain = Domain.query.filter_by(name=domain_name).first()
     if not domain:
         return jsonify({'status': 'error', 'msg': 'Domain not found.'}), 404
-
+    
     # Kiểm tra xem domain có thuộc về một trong các tài khoản trong list_account hay không
-    if domain.account_id not in [account.id for account in list_account]:
-        return jsonify({'status': 'error', 'msg': 'You do not have permission to delete this domain.'}), 403
+    # if domain.account_id not in [account.id for account in list_account]:
+    #     return jsonify({'status': 'error', 'msg': 'You do not have permission to delete this domain.'}), 403
 
-    # Tiếp tục xử lý nếu có quyền xóa
 
     # Kiểm tra trạng thái hiện tại của domain
     if domain.status == 'Pending' or domain.status == 'Deactive':
@@ -368,7 +368,85 @@ def api_login_delete_zone(domain_name):
             abort(500)
 
         return resp.content, resp.status_code, resp.headers.items()
+def api_login_delete_zone_custom(domain_name):
+    if not domain_name:
+        return jsonify({'status': 'error', 'msg': 'Domain name is required.'}), 400
+    if g.apikey.role.name not in ['Administrator', 'Operator']:
+        list_account = g.apikey.accounts
 
+        # Tìm domain trong cơ sở dữ liệu
+        domain = Domain.query.filter_by(name=domain_name).first()
+        if not domain:
+            return jsonify({'status': 'error', 'msg': 'Domain not found.'}), 404
+        
+        # Kiểm tra xem domain có thuộc về một trong các tài khoản trong list_account hay không
+        if domain.account_id not in [account.id for account in list_account]:
+            return jsonify({'status': 'error', 'msg': 'You do not have permission to delete this domain.'}), 403
+
+
+    # Kiểm tra trạng thái hiện tại của domain
+    if domain.status == 'Pending' or domain.status == 'Deactive':
+        # Xóa domain từ cơ sở dữ liệu
+        try:
+            db.session.delete(domain)
+            db.session.commit()
+            return jsonify({'status': 'ok', 'msg': 'Domain deleted successfully'}), 200
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error('Cannot delete domain. Error: {0}'.format(e))
+            return jsonify({'status': 'error', 'msg': 'Cannot delete domain'}), 500
+    elif domain.status == 'Active':
+        pdns_api_url = Setting().get('pdns_api_url')
+        pdns_api_key = Setting().get('pdns_api_key')
+        pdns_version = Setting().get('pdns_version')
+        api_uri_with_prefix = utils.pdns_api_extended_uri(pdns_version)
+        api_full_uri = api_uri_with_prefix + '/servers/localhost/zones'
+        api_full_uri += '/' + domain_name
+        headers = {}
+        headers['X-API-Key'] = pdns_api_key
+
+        domain = Domain.query.filter(Domain.name == domain_name)
+
+        if not domain:
+            abort(404)
+
+        # if current_user.role.name not in ['Administrator', 'Operator']:
+        if g.apikey.role.name not in ['Administrator', 'Operator']:
+            user_domains_obj_list = get_user_domains()
+            user_domains_list = [item.name for item in user_domains_obj_list]
+
+            if domain_name not in user_domains_list:
+                raise DomainAccessForbidden()
+
+        msg_str = "Sending request to powerdns API {0}"
+        current_app.logger.debug(msg_str.format(domain_name))
+
+        try:
+            resp = utils.fetch_remote(urljoin(pdns_api_url, api_full_uri),
+                                    method='DELETE',
+                                    headers=headers,
+                                    accept='application/json; q=1',
+                                    verify=Setting().get('verify_ssl_connections'))
+
+            if resp.status_code == 204:
+                current_app.logger.debug("Request to powerdns API successful")
+
+                domain = Domain()
+                # domain_id = domain.get_id_by_name(domain_name)
+                domain.update()
+
+                # history = History(msg='Delete zone {0}'.format(
+                #     utils.pretty_domain_name(domain_name)),
+                #     detail='',
+                #     created_by="Admin",
+                #     domain_id=domain_id)
+                # history.add()
+
+        except Exception as e:
+            current_app.logger.error('Error: {0}'.format(e))
+            abort(500)
+
+        return resp.content, resp.status_code, resp.headers.items()
 
 @api_bp.route('/pdnsadmin/apikeys', methods=['POST'])
 # @api_basic_auth

@@ -1,6 +1,6 @@
 {% macro name(domain) %}
-    <a href="{{ url_for('domain.domain', domain_name=domain.name) if domain.status == 'Active' else '#' }}"
-        class="{{ '' if domain.status == 'Active' else 'pending-domain' }}" data-domain="{{ domain.name }}" data-status="{{domain.status}}">
+    <a href="{{ url_for('domain.domain', domain_name=domain.name) if domain.status in ['Active', 'Default'] else '#' }}"
+        class="{{ '' if domain.status in ['Active', 'Default'] else 'pending-domain' }}" data-domain="{{ domain.name }}" data-status="{{domain.status}}">
         <strong>{{ domain.name | pretty_domain_name }}</strong>
     </a>
     <td>
