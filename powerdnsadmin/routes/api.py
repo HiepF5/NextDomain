@@ -4,7 +4,7 @@ import string
 from base64 import b64encode
 from urllib.parse import urljoin
 import traceback
-
+from sqlalchemy.sql import func
 import requests
 from ..lib.utils import pretty_domain_name
 from flask import (Blueprint, g, request, abort, current_app, make_response, jsonify)
@@ -2002,7 +2002,7 @@ def change_domain_status():
 def api_create_zone_internal(data, account_name):
     d = Domain()
     # account_name = g.apikey.accounts[0].name
-    result = d.add(domain_name=data.get('name'),
+    result = d.add_powerdns(domain_name=data.get('name'),
                            domain_type=data.get('type', 'Native'),
                            soa_edit_api=data.get('soa_edit_api', 'DEFAULT'),
                            domain_master_ips=data.get('domain_master_ips', []),
@@ -2309,8 +2309,9 @@ def change_domain_status_dynamic(status, domain_name):
     try:
         if current_status == 'Pending' and status == 'Active':
             # Thay đổi trạng thái của domain thành Active và đồng bộ với PowerDNS
-            # domain.status = 'Active'
-            db.session.delete(domain)
+            domain.status = 'Active'
+            domain.update_time_deactive = func.now()
+            # db.session.delete(domain)
             db.session.commit()
 
             # Đồng bộ domain xuống PowerDNS bằng cách gọi hàm api_create_zone_internal
@@ -2323,6 +2324,8 @@ def change_domain_status_dynamic(status, domain_name):
         elif current_status == 'Deactive' and status == 'Active':
             # Thay đổi trạng thái của domain thành Active và đồng bộ với PowerDNS
             domain.status = 'Active'
+            domain.update_time_deactive = func.now()
+            # db.session.delete(domain)
             db.session.commit()
 
            

@@ -1086,7 +1086,7 @@ class Domain(db.Model):
                 d.is_user_created = is_user_created
                 d.is_domain_free = is_domain_free
                 d.status = status
-                d.update_time_deactive =  func.now()
+                d.update_time_deactive = func.now()
                 d.create_at = func.now()
                 d.updated_at = func.now()
                 db.session.add(d)
@@ -1099,3 +1099,61 @@ class Domain(db.Model):
                 current_app.logger.error("Rolled back adding new domain {0}".format(domain_dict['name']))
                 raise e
 
+    def add_powerdns(self,
+                domain_name,
+                domain_type,
+                soa_edit_api,
+                is_user_created,
+                is_domain_free,
+                status,
+                domain_ns=[],
+                domain_master_ips=[],
+                account_name=None):
+            """
+            Add a zone to power dns
+            """
+
+            headers = {'X-API-Key': self.PDNS_API_KEY, 'Content-Type': 'application/json'}
+
+            domain_name = domain_name + '.'
+            domain_ns = [ns + '.' for ns in domain_ns]
+
+            if soa_edit_api not in ["DEFAULT", "INCREASE", "EPOCH", "OFF"]:
+                soa_edit_api = 'DEFAULT'
+
+            elif soa_edit_api == 'OFF':
+                soa_edit_api = ''
+
+            post_data = {
+                "name": domain_name,
+                "kind": domain_type,
+                "masters": domain_master_ips,
+                "nameservers": domain_ns,
+                "soa_edit_api": soa_edit_api,
+                "account": account_name
+            }
+
+            try:
+                jdata = utils.fetch_json(
+                    urljoin(self.PDNS_STATS_URL,
+                            self.API_EXTENDED_URL + '/servers/localhost/zones'),
+                    headers=headers,
+                    timeout=int(Setting().get('pdns_api_timeout')),
+                    method='POST',
+                    verify=Setting().get('verify_ssl_connections'),
+                    data=post_data)
+                if 'error' in jdata.keys():
+                    current_app.logger.error(jdata['error'])
+                    if jdata.get('http_code') == 409:
+                        return {'status': 'error', 'msg': 'Zone already exists'}
+                    return {'status': 'error', 'msg': jdata['error']}
+                else:
+                    current_app.logger.info(
+                        'Added zone successfully to PowerDNS: {0}'.format(
+                            domain_name))
+                    return {'status': 'ok', 'msg': 'Added zone successfully'}
+            except Exception as e:
+                current_app.logger.error('Cannot add zone {0} {1}'.format(
+                    domain_name, e))
+                current_app.logger.debug(traceback.format_exc())
+                return {'status': 'error', 'msg': 'Cannot add this zone.'}
