@@ -28,6 +28,7 @@ function applyChanges(data, url, showResult, refreshPage) {
 }
 
 function applyRecordChanges(data, domain) {
+    debugger
     $.ajax({
         type : "POST",
         url : $SCRIPT_ROOT + '/domain/' + encodeURIComponent(domain) + '/apply',
@@ -141,7 +142,16 @@ function editRow(oTable, nRow) {
     jqTds[2].innerHTML = '<select class="form-control" id="record_status" name="record_status" value="' + aData[2]  + '"><option value="false">Active</option><option value="true">Disabled</option></select>';
     jqTds[3].innerHTML = '<select class="form-control" id="record_ttl" name="record_ttl" value="' + aData[3]  + '">' + ttl_opts + '</select>';
     jqTds[4].innerHTML = '<input type="text" style="display:table-cell; width:100% !important" id="current_edit_record_data" name="current_edit_record_data" class="form-control input-small advance-data" value="' + aData[4].replace(/\"/g,"&quot;") + '">';
+    // jqTds[5].innerHTML = '<input type="text" style="display:table-cell; width:100% !important" id="record_comment" name="record_comment" class="form-control input-small advance-data" value="' + aData[5].replace(/\"/g, "&quot;") + '">';
     jqTds[5].innerHTML = '<input type="text" style="display:table-cell; width:100% !important" id="record_comment" name="record_comment" class="form-control input-small advance-data" value="' + aData[5].replace(/\"/g, "&quot;") + '">';
+
+    document.getElementById('record_comment').addEventListener('input', function() {
+    var role = document.querySelector('.row_record').getAttribute('data-role');
+    if (role === 'User' && this.value === 'default') {
+        $('#warningModal').modal('show');
+        this.value = '';
+    }
+});
     jqTds[6].innerHTML = '<button type="button" class="btn btn-primary button_save">Save</button>';
     jqTds[7].innerHTML = '<button type="button" class="btn btn-primary button_cancel">Cancel</button>';
 

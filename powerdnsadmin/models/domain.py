@@ -539,7 +539,7 @@ class Domain(db.Model):
         try:
             domain = Domain.query.filter_by(name=domain_name).first()
             if domain:
-                if domain.status == 'Acitve':
+                if domain.status in ['Active', 'Default']:
                     self.delete_domain_from_powerdns(domain_name)
                     self.delete_domain_from_pdnsadmin(domain_name)
                 else:

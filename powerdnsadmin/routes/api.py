@@ -64,18 +64,18 @@ def is_custom_header_api():
 
 def get_user_domains():
     account_name = g.apikey.accounts[0].name
-    # domains = db.session.query(Domain) \
-    #     .outerjoin(Account, Domain.account_id == Account.id) \
-    #     .filter(Account.name == account_name) \
-    #     .all()
-    # return domains
     domains = db.session.query(Domain) \
         .outerjoin(Account, Domain.account_id == Account.id) \
-        .filter(
-            Account.name == account_name,
-            Domain.is_user_created == 1
-        ) \
+        .filter(Account.name == account_name) \
         .all()
+    return domains
+    # domains = db.session.query(Domain) \
+    #     .outerjoin(Account, Domain.account_id == Account.id) \
+    #     .filter(
+    #         Account.name == account_name,
+    #         Domain.is_user_created == 1
+    #     ) \
+    #     .all()
     return domains
 
 

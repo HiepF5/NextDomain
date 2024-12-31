@@ -116,40 +116,70 @@
                                 </thead>
                                 <tbody>
                                 {% for record in records %}
-                                    <tr class="odd row_record" id="{{ domain.name }}">
+                                    <tr class="odd row_record" id="{{ domain.name }}" data-role="{{current_user.role.name}}">
                                         <td>{{ (record.name,domain.name) | display_record_name | pretty_domain_name }}</td>
                                         <td>{{ record.type }}</td>
                                         <td>{{ record.status }}</td>
                                         <td>{{ record.ttl }}</td>
                                         <td>{{ record.data | pretty_domain_name }}</td>
                                         {% if domain.type != 'Slave' %}
-                                            <td>{{ record.comment }}</td>
-                                            <td>
-                                                {% if record.is_allowed_edit() %}
-                                                    <button type="button" title="Edit" class="btn btn-sm btn-warning button_edit">
-                                                        <i class="fa-solid fa-edit"></i>
-                                                    </button>
-                                                {% else %}
-                                                    <button type="button" class="btn btn-sm btn-warning">
-                                                        <i class="fa-solid fa-exclamation-circle"></i>
-                                                    </button>
-                                                {% endif %}
-                                                {% if record.is_allowed_delete() %}
-                                                    <button type="button" title="Delete" class="btn btn-sm btn-danger button_delete">
-                                                        <i class="fa-solid fa-trash"></i>
-                                                    </button>
-                                                {% endif %}
-                                                {% if current_user.role.name in ['Administrator', 'Operator'] or allow_user_view_history %}
-                                                    <button type="button" title="Changelog"
-                                                            onclick="show_record_changelog('{{ record.name }}','{{ record.type }}',event)"
-                                                            class="btn btn-primary btn-sm">
-                                                        <i class="fa-solid fa-history" aria-hidden="true"></i>
-                                                    </button>
-                                                {% endif %}
-                                            </td>
+                                            {% if (current_user.role.name in ['Administrator', 'Operator']) %}
+                                                <td class="data_comment data_comment_{{ record.id }}">{{ record.comment }}</td>
+                                                <td>
+                                                    {% if record.is_allowed_edit()%}
+                                                        <button type="button" title="Edit" class="btn btn-sm btn-warning button_edit">
+                                                            <i class="fa-solid fa-edit"></i>
+                                                        </button>
+                                                    {% endif %}
+                                                    {% if record.is_allowed_delete() %}
+                                                        <button type="button" title="Delete" class="btn btn-sm btn-danger button_delete">
+                                                            <i class="fa-solid fa-trash"></i>
+                                                        </button>
+                                                    {% endif %}
+                                                    {% if (current_user.role.name in ['Administrator', 'Operator'] or allow_user_view_history ) %}
+                                                        <button type="button" title="Changelog"
+                                                                onclick="show_record_changelog('{{ record.name }}','{{ record.type }}',event)"
+                                                                class="btn btn-primary btn-sm">
+                                                            <i class="fa-solid fa-history" aria-hidden="true"></i>
+                                                        </button>
+                                                    {% endif %}
+                                                </td>
+                                            {% else %}
+                                                <td class="data_comment data_comment_{{ record.id }}">{{ record.comment }}</td>
+                                                <td>
+                                                    {% if record.comment != 'default'%}
+                                                        {% if record.is_allowed_edit() %}
+                                                        <button type="button" title="Edit" class="btn btn-sm btn-warning button_edit">
+                                                            <i class="fa-solid fa-edit"></i>
+                                                        </button>
+                                                        {% else %}
+                                                        <button type="button" class="btn btn-sm btn-warning">
+                                                            <i class="fa-solid fa-exclamation-circle"></i>
+                                                        </button>
+                                                        {% endif %}
+                                                        {% if record.is_allowed_delete() %}
+                                                        <button type="button" title="Delete" class="btn btn-sm btn-danger button_delete">
+                                                            <i class="fa-solid fa-trash"></i>
+                                                        </button>
+                                                        {% endif %}
+                                                        {% if (current_user.role.name in ['Administrator', 'Operator'] or allow_user_view_history ) %}
+                                                        <button type="button" title="Changelog"
+                                                            onclick="show_record_changelog('{{ record.name }}','{{ record.type }}',event)" class="btn btn-primary btn-sm">
+                                                            <i class="fa-solid fa-history" aria-hidden="true"></i>
+                                                        </button>
+                                                        {% endif %}
+                                                    {% else %}
+                                                        {% if record.is_allowed_edit() %}
+                                                        <button type="button" title="Edit" class="btn btn-sm btn-warning button_edit" disabled>
+                                                            Action Not Allowed
+                                                        </button>
+                                                        {% endif %}
+                                                    {% endif %}
+                                                </td>
+                                            {% endif %}
                                         {% endif %}
                                         <!-- hidden column that we can sort on -->
-                                        <td>1</td>
+                                        <td></td>
                                     </tr>
                                 {% endfor %}
                                 </tbody>
@@ -320,6 +350,12 @@
         // handle edit button and record click
         {% if domain.type != 'Slave' %}
             $(document.body).on("click", ".button_edit{% if quick_edit %}, .row_record{% endif %}", function (e) {
+                debugger
+                var comment = $(this).find(".data_comment").text().trim();
+                if (comment == 'default') {
+                    showErrorModal("Action not allowed. This is a default zone.");
+                    return;
+                }
                 e.stopPropagation();
                 if ($(this).is('tr')) {
                     var nRow = $(this)[0];
@@ -852,6 +888,25 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-primary" data-dismiss="modal" onclick=" location.reload();">OK</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal fade" id="warningModal" tabindex="-1" role="dialog" aria-labelledby="warningModalLabel"
+        aria-hidden="true">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="warningModalLabel">Warning</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    The value "default" is not allowed.
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
                 </div>
             </div>
         </div>

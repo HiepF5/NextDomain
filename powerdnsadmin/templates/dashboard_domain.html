@@ -108,8 +108,15 @@
                             onclick="window.location.href='{{ url_for('domain.remove') }}'">
                         <span style="color: red;"><i class="fa-solid fa-trash"></i>&nbsp;Remove Zone</span>
                     </button>
+                {% elif current_user.role.name in ['Administrator', 'Operator'] %}
+                <div class="dropdown-divider"></div>
+                <button type="button" class="dropdown-item btn-secondary button_delete"
+                    onclick="window.location.href='{{ url_for('domain.remove') }}'">
+                    <span style="color: red;"><i class="fa-solid fa-trash"></i>&nbsp;Remove Zone</span>
+                </button>
+                <div class="dropdown-divider"></div>
                 {% endif %}
-                {% if current_user.role.name in ['Administrator', 'Operator', "User"] and domain.status == "Default" %}
+                {% if current_user.role.name in ["User"] and domain.status == "Default" %}
                     <button type="button" class="dropdown-item btn-secondary" disabled>
                         <span style="color: gray;"><i class="fa-solid fa-ban"></i>&nbsp;Action Not Allowed</span>
                     </button>
