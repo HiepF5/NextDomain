@@ -1,5 +1,11 @@
 from lima import fields, Schema
 
+class AccountSchema(Schema):
+    id = fields.Integer()
+    name = fields.String()
+    description = fields.String()
+    contact = fields.String()
+    mail = fields.String()
 
 class DomainSchema(Schema):
     id = fields.Integer()
@@ -7,6 +13,8 @@ class DomainSchema(Schema):
     status = fields.String()
     update_time_deactive = fields.DateTime()
     updated_at = fields.DateTime()
+    account_id = fields.Integer()
+    account = fields.Embed(schema=AccountSchema)
 
 
 class RoleSchema(Schema):
