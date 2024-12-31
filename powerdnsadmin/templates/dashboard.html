@@ -175,7 +175,7 @@
         {% for tab_id in zone_tabs.order %}
         setUpDomainList("#tbl_domain_list_{{tab_id}}", "{{ url_for('dashboard.domains_custom', tab_id=tab_id) }}");
         {% endfor %}
-    {% elif current_user.role.name == 'User' %}
+    {% elif current_user.role.name in ['User'] %}
         {% for tab_id in zone_tabs.ordersubtabs %}
         setUpDomainList("#tbl_domain_list_{{tab_id}}", "{{ url_for('dashboard.domains_custom', tab_id=tab_id) }}");
         {% endfor %}
