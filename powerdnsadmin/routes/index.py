@@ -392,11 +392,13 @@ def login():
         return authenticate_user(user, 'Azure OAuth')
 
     if 'oidc_token' in session:
-        user_data = json.loads(oidc.get('userinfo').text)
-        oidc_username = user_data[Setting().get('oidc_oauth_username')]
-        oidc_first_name = user_data[Setting().get('oidc_oauth_firstname')]
-        oidc_last_name = user_data[Setting().get('oidc_oauth_last_name')]
-        oidc_email = user_data[Setting().get('oidc_oauth_email')]
+        user_data = oidc.userinfo()
+        print(user_data)
+        oidc_username = user_data['preferred_username']
+        oidc_first_name = user_data.get('first_name', user_data.get('name', ''))
+        oidc_last_name = user_data.get('last_name', '')
+        oidc_email = user_data.get('email', '')
+        Role_groups = user_data['groups']
 
         user = User.query.filter_by(username=oidc_username).first()
         if not user:
@@ -405,12 +407,32 @@ def login():
                         firstname=oidc_first_name,
                         lastname=oidc_last_name,
                         email=oidc_email)
-            result = user.create_local_user()
+            
+            if not Role_groups:
+                user.role_id = Role.query.filter_by(name='User').first().id
+            else:
+                if "NextDomain Admin" in Role_groups:
+                    user.role_id = Role.query.filter_by(name='Administrator').first().id
+                elif "NextZen Admin" in Role_groups and "NextDomain Admin" not in Role_groups:
+                    user.role_id = Role.query.filter_by(name='Operator').first().id
+                else:
+                    user.role_id = Role.query.filter_by(name='User').first().id
+                result = user.create_local_user()
         else:
             user.firstname = oidc_first_name
             user.lastname = oidc_last_name
             user.email = oidc_email
             user.plain_text_password = None
+            
+            if not Role_groups:
+                user.role_id = Role.query.filter_by(name='User').first().id
+            else:
+                if "NextDomain Admin" in Role_groups:
+                    user.role_id = Role.query.filter_by(name='Administrator').first().id
+                elif "NextZen Admin" in Role_groups and "NextDomain Admin" not in Role_groups:
+                    user.role_id = Role.query.filter_by(name='Operator').first().id
+                else:
+                    user.role_id = Role.query.filter_by(name='User').first().id
             result = user.update_local_user()
 
         if not result['status']:

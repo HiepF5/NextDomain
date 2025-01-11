@@ -7,8 +7,9 @@
         <link rel="icon" href="{{ url_for('static', filename='img/favicon.png') }}">
         {% block title %}<title>{{ SITE_NAME }}</title>{% endblock %}
         <link rel="stylesheet" href="{{ url_for('static', filename='assets/css/style.css') }}">
-        <link rel="stylesheet" href="{{ url_for('static', filename='assets/css/source_sans_pro.css') }}">
         <link rel="stylesheet" href="{{ url_for('static', filename='assets/css/roboto_mono.css') }}">
+        <link rel="stylesheet" href="{{ url_for('static', filename='assets/css/source_sans_pro.css') }}">
+        <!-- <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet"> -->
         <!-- Tell the browser to be responsive to screen width -->
         <meta content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" name="viewport">
         <!-- Tell Safari to not recognise telephone numbers -->
@@ -50,14 +51,16 @@
     <aside class="main-sidebar sidebar-dark-primary">
         <!-- Logo -->
         <a href="{{ url_for('index.index') }}" class="brand-link">
-            <img src="{{ url_for('static', filename='img/favicon.png') }}" alt="PowerDNS-Admin FavIcon"
-                 class="brand-image img-circle elevation-3" style="opacity: .8">
+            <img src="{{ url_for('static', filename='img/logo.png') }}" alt="NextDomain FavIcon"
+                 class="brand-image " style="opacity: .8">
             <span class="brand-text font-weight-light">
-        {% if SETTING.get('site_name') %}
+                <img src="{{ url_for('static', filename='img/text.png') }}" alt="NextDomain FavIcon"
+                 class="brand-image " style="opacity: .8; margin-left: 0px;">
+        <!-- {% if SETTING.get('site_name') %}
             <b>{{ SITE_NAME }}</b>
         {% else %}
-            <b>PowerDNS</b>-Admin
-        {% endif %}
+            <b>NextDomain</b>
+        {% endif %} -->
       </span>
         </a>
         <!-- sidebar: style can be found in sidebar.less -->
@@ -85,13 +88,29 @@
                             <p>Dashboard</p>
                         </a>
                     </li>
-                    {% if SETTING.get('allow_user_create_domain') or current_user.role.name in ['Administrator', 'Operator'] %}
+                    {% if current_user.role.name in ['Administrator', 'Operator'] %}
                         <li class="{{ 'nav-item active' if active_page == 'nav-item new_domain' else 'nav-item' }}">
                             <a href="{{ url_for('domain.add') }}" class="nav-link">
                                 <i class="nav-icon fa-solid fa-plus"></i>
                                 <p>Create Zone</p>
                             </a>
                         </li>
+                    {% endif %}
+                    {% if current_user.role.name in ['User'] %}
+                        <li class="{{ 'nav-item active' if active_page == 'nav-item new_domain' else 'nav-item' }}">
+                            <a href="{{ url_for('domain.user_add') }}" class="nav-link">
+                                <i class="nav-icon fa-solid fa-plus"></i>
+                                <p>Create Domain</p>
+                            </a>
+                        </li>
+                    {% endif %}
+                    {% if current_user.role.name in ['User'] %}
+                    <li class="{{ 'nav-item active' if active_page == 'nav-item new_domain' else 'nav-item' }}">
+                        <a href="{{ url_for('domain.language') }}" class="nav-link">
+                            <i class="nav-icon fa-solid fa-language"></i>
+                            <p>Language</p>
+                        </a>
+                    </li>
                     {% endif %}
                     {% if SETTING.get('allow_user_remove_domain') or current_user.role.name in ['Administrator', 'Operator'] %}
                         <li class="{{ 'nav-item active' if active_page == 'remove_domain' else 'nav-item' }}">
@@ -192,6 +211,23 @@
                             </ul>
                         </li>
                     {% endif %}
+                    {% if current_user.role.name in ['User'] %}
+                    <li class="{{ 'nav-item active' if active_page == 'admin_keys' else 'nav-item' }}">
+                        <a href="{{ url_for('user.user_manage_keys') }}" class="nav-link">
+                            <i class="nav-icon fa-solid fa-key"></i>
+                            <p>API Keys</p>
+                        </a>
+                    </li>
+                    {% endif %}
+                    {% if current_user.role.name in ['User'] %}
+                    <li class="{{ 'nav-item active' if active_page == 'admin_keys' else 'nav-item' }}">
+                        <a href="{{ url_for('user.user_guide') }}" class="nav-link">
+                            <i class="nav-icon fa-solid fa-book"></i>
+                            <p>Instructions</p>
+                        </a>
+                    </li>
+                    {% endif %}
+                   
                 </ul>
             {% endif %}
         </div>
@@ -226,7 +262,7 @@
     </div>
     <!-- /.content-wrapper -->
     <footer class="main-footer">
-        <strong><a href="https://github.com/PowerDNS-Admin/PowerDNS-Admin">PowerDNS-Admin</a></strong> - A PowerDNS web
+        <strong><a href="https://github.com/PowerDNS-Admin/PowerDNS-Admin">NextDomain</a></strong> - A NextDomain web
         interface with advanced features.
         <span class="float-right">Version 0.4.2</span>
     </footer>

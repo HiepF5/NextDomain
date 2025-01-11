@@ -36,13 +36,20 @@ class ZoneTabs:
     """
 
     tabs = {
-        'forward': TabInfo("", None),
-        'reverse_ipv4': TabInfo("in-addr.arpa", '%.in-addr.arpa'),
-        'reverse_ipv6': TabInfo("ip6.arpa", '%.ip6.arpa'),
+    'forward': TabInfo("", None),
+    'reverse_ipv4': TabInfo("in-addr.arpa", '%.in-addr.arpa'),
+    'reverse_ipv6': TabInfo("ip6.arpa", '%.ip6.arpa'),
     }
+    subtabs = {
+    'forward': TabInfo("DNS Records", 'forward'),
+    'domain_to_hosting': TabInfo("Configure Domain to Hosting", 'domain_to_hosting'),
+    'domain_to_email': TabInfo("Configure Domain to Email", 'domain_to_email'),
+    }
+
     """Dict of unique tab id to a TabInfo."""
 
-    order = ['forward', 'reverse_ipv4', 'reverse_ipv6']
+    order = ['forward', 'reverse_ipv4', 'reverse_ipv6', ]
+    ordersubtabs = ['forward', 'domain_to_hosting', 'domain_to_email' ]
     """List of tab ids in the order they will appear."""
 
 
@@ -69,7 +76,7 @@ def before_request():
 @dashboard_bp.route('/domains-custom/<path:tab_id>', methods=['GET'])
 @login_required
 def domains_custom(tab_id):
-    if tab_id not in ZoneTabs.tabs:
+    if tab_id not in ZoneTabs.tabs and tab_id not in ZoneTabs.subtabs:
         abort(404)
 
     if current_user.role.name in ['Administrator', 'Operator']:
@@ -83,10 +90,11 @@ def domains_custom(tab_id):
             .outerjoin(Account, Domain.account_id == Account.id) \
             .outerjoin(AccountUser, Account.id == AccountUser.account_id) \
             .filter(
-            db.or_(
-                DomainUser.user_id == current_user.id,
-                AccountUser.user_id == current_user.id
-            ))
+                db.or_(
+                    DomainUser.user_id == current_user.id,
+                    AccountUser.user_id == current_user.id
+                )
+            )
 
     template = current_app.jinja_env.get_template("dashboard_domain.html")
     render = template.make_module(
@@ -112,15 +120,25 @@ def domains_custom(tab_id):
     if order_by:
         domains = domains.order_by(*order_by)
 
-    if ZoneTabs.tabs[tab_id].filter_pattern:
+    # Determine the filter pattern based on whether the tab_id is in tabs or subtabs
+    if tab_id in ZoneTabs.tabs:
+        filter_pattern = ZoneTabs.tabs[tab_id].filter_pattern
+    elif tab_id in ZoneTabs.subtabs:
+        filter_pattern = ZoneTabs.subtabs[tab_id].filter_pattern
+    else:
+        filter_pattern = None
+
+    if filter_pattern:
         # If the tab has a filter, use only that
-        domains = domains.filter(Domain.name.ilike(ZoneTabs.tabs[tab_id].filter_pattern))
+        domains = domains.filter(Domain.name.ilike(filter_pattern))
     else:
         # If the tab has no filter, use all the other filters in negated form
         for tab_info in ZoneTabs.tabs.values():
-            if not tab_info.filter_pattern:
-                continue
-            domains = domains.filter(not_(Domain.name.ilike(tab_info.filter_pattern)))
+            if tab_info.filter_pattern:
+                domains = domains.filter(not_(Domain.name.ilike(tab_info.filter_pattern)))
+        for subtab_info in ZoneTabs.subtabs.values():
+            if subtab_info.filter_pattern:
+                domains = domains.filter(not_(Domain.name.ilike(subtab_info.filter_pattern)))
 
     total_count = domains.count()
 

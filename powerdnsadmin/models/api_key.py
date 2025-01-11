@@ -13,6 +13,7 @@ class ApiKey(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     key = db.Column(db.String(255), unique=True, nullable=False)
     description = db.Column(db.String(255))
+    key_view = db.Column(db.String(255))
     role_id = db.Column(db.Integer, db.ForeignKey('role.id'))
     role = db.relationship('Role', back_populates="apikeys", lazy=True)
     domains = db.relationship("Domain",
@@ -22,12 +23,13 @@ class ApiKey(db.Model):
                                secondary="apikey_account",
                                back_populates="apikeys")
 
-    def __init__(self, key=None, desc=None, role_name=None, domains=[], accounts=[]):
+    def __init__(self, key=None, key_view=None, desc=None, role_name=None, domains=[], accounts=[]):
         self.id = None
         self.description = desc
         self.role_name = role_name
         self.domains[:] = domains
         self.accounts[:] = accounts
+        self.key_view = key_view
         if not key:
             rand_key = ''.join(
                 secrets.choice(string.ascii_letters + string.digits)
@@ -58,7 +60,7 @@ class ApiKey(db.Model):
             db.session.rollback()
             raise e
 
-    def update(self, role_name=None, description=None, domains=None, accounts=None):
+    def update(self, role_name=None, description=None, domains=None, accounts=None, key_view=None, key=None):
         try:
           if role_name:
               role = Role.query.filter(Role.name == role_name).first()
@@ -66,6 +68,16 @@ class ApiKey(db.Model):
 
           if description:
               self.description = description
+              
+          if key_view:
+              self.key_view = key_view
+              
+          if key:
+                rand_key = ''.join(
+                    secrets.choice(string.ascii_letters + string.digits)
+                    for _ in range(15))
+                self.plain_key = rand_key
+                self.key = self.get_hashed_password(rand_key).decode('utf-8')
 
           if domains is not None:
               domain_object_list = Domain.query \

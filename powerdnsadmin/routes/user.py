@@ -2,15 +2,26 @@ import datetime
 import hashlib
 import imghdr
 import mimetypes
-
+import json
 from flask import Blueprint, request, render_template, make_response, jsonify, redirect, url_for, g, session, \
     current_app, after_this_request, abort
 from flask_login import current_user, login_required, login_manager
-
+from ..decorators import user_create_domain
 from ..models.user import User, Anonymous
 from ..models.setting import Setting
+from ..models.api_key import ApiKey
+from ..models.role import Role
+from ..models.domain import Domain
+from ..models.history import History
+from ..models.account_user import AccountUser
+from ..lib.errors import ApiKeyCreateFail
+from ..models.base import db
+from ..models.account import Account
+from ..models.api_key_account import ApiKeyAccount
 from .index import password_policy_check
-
+from ..lib.schema import ApiPlainKeySchema
+from base64 import b64encode
+apikey_plain_schema = ApiPlainKeySchema(many=True)
 
 user_bp = Blueprint('user',
                     __name__,
@@ -106,8 +117,84 @@ def profile():
         user.update_profile()
 
         return render_template('user_profile.html')
+    
+@user_bp.route('/user-manage-keys', methods=['GET', 'POST'])
+@login_required
+@user_create_domain
+def user_manage_keys():
+    if request.method == 'GET':
+        try:
+            apikeys = db.session.query(ApiKey) \
+                .join(ApiKeyAccount, ApiKeyAccount.apikey_id == ApiKey.id) \
+                .join(AccountUser, ApiKeyAccount.account_id == AccountUser.account_id) \
+                .filter(AccountUser.user_id == current_user.id) \
+                .all()
+        except Exception as e:
+            current_app.logger.error('Error: {0}'.format(e))
+            abort(500)
 
+        return render_template('user_manage_keys.html',
+                               keys=apikeys)
+@user_bp.route('/key/edit/<key_id>', methods=['GET'])
+@login_required
+@user_create_domain
+def edit_key(key_id=None):
+    apikey = None
+    create = True
+    plain_key = None
+    if key_id:
+        apikey = ApiKey.query.filter(ApiKey.id == key_id).first()
+        create = False
+        if not apikey:
+            return render_template('errors/404.html'), 404
+    if request.method == 'GET':
+        try:
+            apikey.update(key=key_id)
+            plain_key = apikey_plain_schema.dump([apikey])[0]["plain_key"]
+            print(plain_key)
+            plain_key = b64encode(plain_key.encode('utf-8')).decode('utf-8')
+            apikey.key_view = plain_key
+            try:
+                apikey.update() 
+            except Exception as e:
+                current_app.logger.error('Error updating ApiKey: {0}'.format(e))
+                raise ApiKeyCreateFail(message='Failed to save key_view')
+            history_message = "Updated API key {0}".format(apikey.id)
+        except Exception as e:
+            current_app.logger.error('Error: {0}'.format(e))
+         
 
+        history = History(msg=history_message,
+                          detail=json.dumps({
+                              'key': apikey.id,
+                              'role': apikey.role.name,
+                              'description': apikey.description,
+                              'domains': [domain.name for domain in apikey.domains],
+                              'accounts': [a.name for a in apikey.accounts]
+                          }),
+                          created_by=current_user.username)
+        history.add()
+        
+        try:
+            apikeys = db.session.query(ApiKey) \
+                .join(ApiKeyAccount, ApiKeyAccount.apikey_id == ApiKey.id) \
+                .join(AccountUser, ApiKeyAccount.account_id == AccountUser.account_id) \
+                .filter(AccountUser.user_id == current_user.id) \
+                .all()
+        except Exception as e:
+            current_app.logger.error('Error: {0}'.format(e))
+            abort(500)
+        return render_template('user_manage_keys.html',
+                               keys=apikeys,
+                               create=create,
+                               plain_key=plain_key)
+
+@user_bp.route('/user-guide', methods=['GET', 'POST'])
+@login_required
+@user_create_domain
+def user_guide():
+    return render_template('user_guide.html')
+               
 @user_bp.route('/qrcode')
 @login_required
 def qrcode():

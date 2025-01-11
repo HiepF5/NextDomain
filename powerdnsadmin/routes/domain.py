@@ -7,11 +7,13 @@ import dns.reversename
 from distutils.version import StrictVersion
 from flask import Blueprint, render_template, make_response, url_for, current_app, request, redirect, abort, jsonify, g, session
 from flask_login import login_required, current_user, login_manager
+from sqlalchemy.orm import joinedload
+from .base import csrf
 
 from ..lib.utils import pretty_domain_name
 from ..lib.utils import pretty_json
 from ..lib.utils import to_idna
-from ..decorators import can_create_domain, operator_role_required, can_access_domain, can_configure_dnssec, can_remove_domain
+from ..decorators import can_create_domain,user_create_domain, operator_role_required, can_access_domain, can_configure_dnssec, can_remove_domain
 from ..models.user import User, Anonymous
 from ..models.account import Account
 from ..models.setting import Setting
@@ -126,8 +128,10 @@ def domain(domain_name):
         editable_records = forward_records_allow_to_edit
     else:
         editable_records = reverse_records_allow_to_edit
-
+    templates = DomainTemplate.query.options(joinedload(DomainTemplate.records)).all()
+    
     return render_template('domain.html',
+                           templates = templates,
                            domain=domain,
                            records=records,
                            editable_records=editable_records,
@@ -158,7 +162,9 @@ def remove():
                 db.or_(
                     DomainUser.user_id == current_user.id,
                     AccountUser.user_id == current_user.id
-                )).order_by(Domain.name)
+                ),
+                Domain.is_user_created == 1
+                ).order_by(Domain.name)
 
     if request.method == 'POST':
         # TODO Change name from 'domainid' to something else, its confusing
@@ -288,6 +294,7 @@ def add():
     if request.method == 'POST':
         try:
             domain_name = request.form.getlist('domain_name')[0]
+            is_domain_free = 1 if request.form.get('domain_free') == "on" else 0
             domain_type = request.form.getlist('radio_type')[0]
             domain_template = request.form.getlist('domain_template')[0]
             soa_edit_api = request.form.getlist('radio_type_soa_edit_api')[0]
@@ -374,7 +381,11 @@ def add():
                            domain_type=domain_type,
                            soa_edit_api=soa_edit_api,
                            domain_master_ips=domain_master_ips,
-                           account_name=account_name)
+                           is_user_created=0,
+                           is_domain_free=is_domain_free,
+                           status='Default',
+                           account_name=account_name
+                           )
             if result['status'] == 'ok':
                 domain_id = Domain().get_id_by_name(domain_name)
                 history = History(msg='Add zone {0}'.format(
@@ -400,8 +411,9 @@ def add():
                         domain_template).all()
                     record_data = []
                     for template_record in template_records:
+                        processed_data = template_record.data.replace("{ZONE}", domain_name)
                         record_row = {
-                            'record_data': template_record.data,
+                            'record_data': processed_data,
                             'record_name': template_record.name,
                             'record_status': 'Active' if template_record.status else 'Disabled',
                             'record_ttl': template_record.ttl,
@@ -460,6 +472,247 @@ def add():
                                domain_override_toggle=domain_override_toggle)
 
 
+@domain_bp.route('/user_add', methods=['GET', 'POST'])
+@login_required
+@user_create_domain
+def user_add():
+    templates = DomainTemplate.query.all()
+    if request.method == 'POST':
+        try:
+            domain_name = request.form.getlist('domain_name')[0] if request.form.getlist('domain_name')[0] else request.form.getlist('custom_domain_name')[0]
+            if domain_name in request.form.getlist('custom_domain_name'):
+                status = 'Pending'
+            else:
+                status = 'Active'
+            domain_type = 'Native'
+            soa_edit_api = 'DEFAULT'
+            account_ids = [account.id for account in current_user.accounts]
+            account_id = account_ids[0]
+            
+            if ' ' in domain_name or not domain_name or not domain_type:
+                return render_template(
+                    'errors/400.html',
+                    msg="Please enter a valid zone name"), 400
+
+            if domain_name.endswith('.'):
+                domain_name = domain_name[:-1]
+
+            # If User creates the domain, check some additional stuff
+            if current_user.role.name not in ['User']:
+                # Get all the account_ids of the user
+                user_accounts_ids = current_user.get_accounts()
+                user_accounts_ids = [x.id for x in user_accounts_ids]
+                # User may not create domains without Account
+                if int(account_id) == 0 or int(account_id) not in user_accounts_ids:
+                    return render_template(
+                        'errors/400.html',
+                        msg="Please use a valid Account"), 400
+
+
+            #TODO: Validate ip addresses input
+
+            # Encode domain name into punycode (IDN)
+            try:
+                domain_name = to_idna(domain_name, 'encode')
+            except:
+                current_app.logger.error("Cannot encode the zone name {}".format(domain_name))
+                current_app.logger.debug(traceback.format_exc())
+                return render_template(
+                    'errors/400.html',
+                    msg="Please enter a valid zone name"), 400
+
+            if domain_type == 'slave':
+                if request.form.getlist('domain_master_address'):
+                    domain_master_string = request.form.getlist(
+                        'domain_master_address')[0]
+                    domain_master_string = domain_master_string.replace(
+                        ' ', '')
+                    domain_master_ips = domain_master_string.split(',')
+            else:
+                domain_master_ips = []
+
+            account_name = Account().get_name_by_id(account_id)
+
+            d = Domain()
+
+            ### Test if a record same as the domain already exists in an upper level domain
+            if Setting().get('deny_domain_override'):
+
+                upper_domain = None
+                domain_override = False
+                domain_override_toggle = False
+
+                if current_user.role.name in ['User']:
+                    domain_override = request.form.get('domain_override')
+                    domain_override_toggle = True
+
+
+                # If overriding box is not selected.
+                # False = Do not allow ovrriding, perform checks
+                # True = Allow overriding, do not perform checks
+                if not domain_override:
+                    upper_domain = d.is_overriding(domain_name)
+
+                if upper_domain:
+                    if current_user.role.name in ['User']:
+                        accounts = Account.query.order_by(Account.name).all()
+                    else:
+                        accounts = current_user.get_accounts()
+                    
+                    msg = 'Zone already exists as a record under zone: {}'.format(upper_domain)
+                    
+                    return render_template('user_domain_add.html', 
+                                            domain_override_message=msg,
+                                            accounts=accounts,
+                                            domain_override_toggle=domain_override_toggle)
+            if(status == 'Active'):
+                result = d.add(domain_name=domain_name,
+                            domain_type=domain_type,
+                            soa_edit_api=soa_edit_api,
+                            domain_master_ips=domain_master_ips,
+                            is_user_created=1,
+                            is_domain_free=0,
+                            status=status,
+                            account_name=account_name)
+                if result['status'] == 'ok':
+                    domain_id = Domain().get_id_by_name(domain_name)
+                    history = History(msg='Add zone {0}'.format(
+                        pretty_domain_name(domain_name)),
+                                    detail = json.dumps({
+                                        'domain_type': domain_type,
+                                        'domain_master_ips': domain_master_ips,
+                                        'account_id': account_id
+                                    }),
+                                    created_by=current_user.username,
+                                    domain_id=domain_id)
+                    history.add()
+
+                    # grant user access to the domain
+                    Domain(name=domain_name).grant_privileges([current_user.id])
+                    
+                    # Step 1: Find the domain_ids that meet the conditions
+                    domain_name_tuple = db.session.query(Domain.name) \
+                        .filter(
+                            Domain.account_id == account_id,
+                            Domain.is_user_created == 0
+                        ).first()
+                    domain_name_default_user = domain_name_tuple[0] if domain_name_tuple else None
+                    # Nếu người dùng là "User", tự động thêm hai bản ghi mẫu
+                    if current_user.role.name in ['User']:
+                        template_records = [
+                            {
+                                'record_data': f'ns1.{current_user.username}.{domain_name_default_user}' if domain_name_default_user else None,
+                                'record_name': '@',
+                                'record_type': 'NS',
+                                'record_status': 'Active',
+                                'record_ttl': 86400,
+                                'comment_data': [{'content': 'Default record sub1', 'account': ''}]
+                            },
+                            {
+                                'record_data': f'ns2.{current_user.username}.{domain_name_default_user}' if domain_name_default_user else None,
+                                'record_name': '@',
+                                'record_type': 'NS',
+                                'record_status': 'Active',
+                                'record_ttl': 86400,
+                                'comment_data': [{'content': 'Default record sub2', 'account': ''}]
+                            }
+                        ]
+                        r = Record()
+                        result = r.apply(domain_name, template_records)
+                        if result['status'] == 'ok':
+                            history = History(
+                                msg='Applying template {0} to {1} successfully.'.
+                                format('Teamplate default Nextzen', domain_name),
+                                detail = json.dumps({
+                                        'domain':
+                                        domain_name,
+                                        'template':
+                                        'Teamplate default Nextzen',
+                                        'add_rrsets':
+                                        result['data'][0]['rrsets'],
+                                        'del_rrsets':
+                                        result['data'][1]['rrsets']
+                                    }),
+                                created_by=current_user.username,
+                                domain_id=domain_id)
+                            history.add()
+                        else:
+                            history = History(
+                                msg=
+                                'Failed to apply template {0} to {1}.'
+                                .format('Teamplate default Nextzen', domain_name),
+                                detail = json.dumps(result),
+                                created_by=current_user.username)
+                            history.add()
+                    return redirect(url_for('dashboard.dashboard'))
+                else:
+                    return render_template('errors/400.html',
+                                        msg=result['msg']), 400
+            else:
+                result = d.add_personal_domain(domain_name=domain_name,
+                            domain_type=domain_type,
+                            soa_edit_api=soa_edit_api,
+                            domain_master_ips=domain_master_ips,
+                            is_user_created=1,
+                            is_domain_free=0,
+                            status=status,
+                            account_name=account_name)
+                if result['status'] == 'ok':
+                    return redirect(url_for('dashboard.dashboard'))
+                else:
+                    return render_template('errors/400.html',
+                                        msg=result['msg']), 400
+
+        except Exception as e:
+            current_app.logger.error('Cannot add zone. Error: {0}'.format(e))
+            current_app.logger.debug(traceback.format_exc())
+            abort(500)
+
+    # Get
+    else:
+        # account = current_user.get_accounts()
+        domain_names = []
+        domains = Domain.query.filter(
+            Domain.is_domain_free == 1
+        ).all()
+        domain_names.extend([d.name for d in domains])
+        return render_template('user_domain_add.html',
+                            templates=templates,
+                            domain_names=domain_names)
+        
+@domain_bp.route('/check-domain', methods=['GET'])
+@login_required
+@user_create_domain
+def check_domain():
+    domain_name = request.args.get('domain')
+    if not domain_name:
+        return jsonify({'status': 'error', 'msg': 'Domain name is required.'}), 400
+
+    # Check if the domain already exists
+    existing_domain = Domain.query.filter_by(name=domain_name).first()
+    if existing_domain:
+        return jsonify({'status': 'ok', 'available': False, 'msg': 'Domain is already in use.'})
+
+    return jsonify({'status': 'ok', 'available': True, 'msg': 'Domain is available.'})
+
+@domain_bp.route('/language', methods=['GET', 'POST'])
+@login_required
+@user_create_domain
+def language():
+    if request.method == 'POST':
+        # Xử lý POST (người dùng chọn ngôn ngữ)
+        selected_language = request.form.get('language')  # Lấy ngôn ngữ từ form
+        if selected_language:
+            # Lưu ngôn ngữ vào session hoặc cơ sở dữ liệu
+            session['language'] = selected_language  # Lưu vào session
+        return redirect(url_for('domain_bp.language'))  # Reload trang
+
+    # Xử lý GET (hiển thị danh sách ngôn ngữ)
+    supported_languages = ['English', 'Vietnamese', 'French', 'German']  # Danh sách ngôn ngữ
+    current_language = session.get('language', 'English')  # Lấy ngôn ngữ hiện tại (nếu có)
+    return render_template('language.html', 
+                           supported_languages=supported_languages, 
+                           current_language=current_language)
 
 @domain_bp.route('/setting/<path:domain_name>/delete', methods=['POST'])
 @login_required
@@ -861,3 +1114,58 @@ def admin_setdomainsetting(domain_name):
                     'msg':
                     'There is something wrong, please contact Administrator.'
                 }), 400)
+
+@domain_bp.route('/<path:domain_name>/apply_template/<int:template_id>', methods=['POST'])
+@login_required
+@csrf.exempt
+def apply_template_to_domain(domain_name, template_id):
+    current_app.logger.info(f"Received request to apply template {template_id} to domain {domain_name}")
+    try:
+        # Tìm template trong cơ sở dữ liệu
+        template = DomainTemplate.query.filter_by(id=template_id).first()
+        if not template:
+            current_app.logger.error(f"Template {template_id} not found")
+            return jsonify({'status': 'error', 'msg': 'Template not found'}), 404
+
+        # Tìm domain trong cơ sở dữ liệu
+        domain = Domain.query.filter_by(name=domain_name).first()
+        if not domain:
+            current_app.logger.error(f"Domain {domain_name} not found")
+            return jsonify({'status': 'error', 'msg': 'Domain not found'}), 404
+
+        # Tạo các bản ghi trong domain theo template
+        template_records = DomainTemplateRecord.query.filter_by(template_id=template_id).all()
+        record_data = []
+        for record in template_records:
+            processed_data = record.data.replace("{ZONE}", domain_name)
+            record_row = {
+                'record_data': processed_data,
+                'record_name': record.name,
+                'record_type': record.type,
+                'record_status': 'Active' if record.status else 'Inactive',
+                'record_ttl': record.ttl,
+                'comment_data': [{'content': record.comment, 'account': ''}]
+            }
+            record_data.append(record_row)
+
+        r = Record()
+        result = r.apply(domain_name, record_data)
+        if result['status'] == 'ok':
+            history = History(
+                msg='Applying template {0} to {1} successfully.'.format(template.name, domain_name),
+                detail=json.dumps({
+                    'domain': domain_name,
+                    'template': template.name,
+                    'add_rrsets': result['data'][0]['rrsets'],
+                    'del_rrsets': result['data'][1]['rrsets']
+                }),
+                created_by=current_user.username,
+                domain_id=domain.id)
+            history.add()
+            return jsonify({'status': 'ok', 'msg': 'Template applied successfully'}), 200
+        else:
+            current_app.logger.error(f"Failed to apply template {template_id} to domain {domain_name}")
+            return jsonify({'status': 'error', 'msg': 'Failed to apply template'}), 400
+    except Exception as e:
+        current_app.logger.error(f"Cannot apply template to domain. Error: {e}")
+        return jsonify({'status': 'error', 'msg': 'Internal server error'}), 500

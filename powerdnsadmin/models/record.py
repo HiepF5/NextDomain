@@ -69,7 +69,7 @@ class Record(object):
                 continue
 
             while len(r['comments'])<len(r['records']):
-                r['comments'].append({"content": "", "account": ""})
+                r['comments'].append({"content": "default", "account": ""})
             r['records'], r['comments'] = (list(t) for t in zip(*sorted(zip(r['records'], r['comments']), key=by_record_content_pair)))
             rrsets.append(r)
 
@@ -475,7 +475,10 @@ class Record(object):
                                 "content": r['name'],
                                 "disabled": record['disabled']
                             }],
-                            "comments": []
+                            "comments": [{
+                                "content": "default",
+                                "account": ""
+                            }]
                         }]
 
                         # Format the rrset

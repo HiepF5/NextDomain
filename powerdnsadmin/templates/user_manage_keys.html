@@ -1,0 +1,216 @@
+{% extends "base.html" %}
+{% set active_page = "admin_keys" %}
+{% block title %}<title>API Keys - {{ SITE_NAME }}</title>{% endblock %}
+
+{% block dashboard_stat %}
+<div class="content-header">
+    <div class="container-fluid">
+        <div class="row mb-2">
+            <div class="col-sm-6">
+                <h1 class="m-0 text-dark">API Keys</h1>
+            </div>
+            <div class="col-sm-6">
+                <ol class="breadcrumb float-sm-right">
+                    <li class="breadcrumb-item"><a href="{{ url_for('dashboard.dashboard') }}">Dashboard</a></li>
+                    <li class="breadcrumb-item active">API Keys</li>
+                </ol>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<section class="content">
+    <div class="container-fluid">
+        <div class="card card-outline card-primary shadow">
+            <div class="card-header with-border">
+                <h3 class="card-title">API Keys</h3>
+                <div class="card-tools flex gap-2">
+                    <button type="button" class="btn btn-primary float-right button_view_key" title="View Key" onclick="toggleKeyVisibility(this)">
+                        <i class="fa-solid fa-eye"></i>&nbsp;View Key
+                    </button>
+                    <button type="button" class="btn btn-primary float-right button_copy_key" title="Copy Key" onclick="copyKey()">
+                        <i class="fa-solid fa-copy"></i>&nbsp;Copy Key
+                    </button>
+                    <button type="button" class="btn btn-primary float-right button_change_key" title="Change Key"
+                        onclick="window.location.href='{{ url_for('user.edit_key', key_id=keys[0].id) }}'">
+                        <i class="fa-solid fa-plus"></i>&nbsp;Change Key
+                    </button>
+
+
+
+                </div>
+                <!-- /.card-tools -->
+            </div>
+            <!-- /.card-header -->
+            <div class="card-body table-responsive">
+                <table id="tbl_keys" class="table table-bordered table-striped table-hover table-sm records">
+                    <thead>
+                        <tr>
+                            <th>Api Key</th>
+                            <th>Description</th>
+                            <th>Zones</th>
+                            <th>Accounts</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for key in keys %}
+                        <tr class="odd gradeX">
+                            <td class="api-key" data-key-id="{{ key.id }}" data-key="{{ key.key_view }}">*********************</td>
+                            <td>{{ key.description }}</td>
+                            <td>{% for domain in key.domains %}{{ domain.name }}{% if not loop.last %},
+                                {% endif %}{% endfor %}</td>
+                            <td>{% for account in key.accounts %}{{ account.name }}{% if not loop.last %},
+                                {% endif %}{% endfor %}</td>
+                            <td>
+                                <div class="dropdown">
+                                    <button class="btn btn-primary dropdown-toggle" type="button" id="dropdownMenu"
+                                        data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                                        <i class="fa-solid fa-bars"></i>
+                                    </button>
+                                    <div class="dropdown-menu" aria-labelledby="dropdownMenu">
+                                        <button type="button" class="dropdown-item btn-warning"
+                                            onclick="window.location.href='{{ url_for('user.edit_key', key_id=key.id) }}'">
+                                            <i class="fa-solid fa-edit"></i>&nbsp;Change API Key
+                                        </button>
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <!-- /.card-body -->
+        </div>
+        <!-- /.card -->
+    </div>
+    <!-- /.container-fluid -->
+</section>
+{% endblock %}
+
+{% block extrascripts %}
+<script>
+    // set up key data table
+    $("#tbl_keys").DataTable({
+        "paging": true,
+        "lengthChange": true,
+        "searching": true,
+        "ordering": true,
+        "info": false,
+        "autoWidth": false,
+        "lengthMenu": [
+            [10, 25, 50, 100, -1],
+            [10, 25, 50, 100, "All"]
+        ],
+        "pageLength": 10
+    });
+
+    // handle deletion of keys
+    $(document.body).on('click', '.button_delete', function () {
+        var modal = $("#modal_delete");
+        var key_id = $(this).prop('id');
+        var info = "Are you sure you want to delete key #" + key_id + "?";
+        modal.find('.modal-body p').text(info);
+        modal.find('#button_delete_confirm').click(function () {
+            var postdata = {
+                'action': 'delete_key',
+                'data': key_id,
+                '_csrf_token': '{{ csrf_token() }}'
+            }
+            applyChanges(postdata, $SCRIPT_ROOT + '/admin/manage-keys', false, true);
+            modal.modal('hide');
+        })
+        modal.modal('show');
+    });
+    function toggleKeyVisibility(button) {
+            const keys = document.querySelectorAll('.api-key');
+            const iconElement = button.querySelector('i');
+
+            keys.forEach((keyElement) => {
+                const key = keyElement.getAttribute('data-key');
+                if (keyElement.textContent === '*********************') {
+                    keyElement.textContent = key;
+                } else {
+                    keyElement.textContent = '*********************';
+                }
+            });
+
+            if (iconElement.classList.contains('fa-eye')) {
+                iconElement.classList.remove('fa-eye');
+                iconElement.classList.add('fa-eye-slash');
+            } else {
+                iconElement.classList.remove('fa-eye-slash');
+                iconElement.classList.add('fa-eye');
+            }
+        }
+
+
+    function copyKey() {
+            const keyElement = document.querySelector('.api-key');
+            if (!keyElement) {
+                console.error('No element with class "api-key" found');
+                return;
+            }
+
+            const key = keyElement.getAttribute('data-key');
+            if (!key) {
+                console.error('Attribute "data-key" not found on element');
+                return;
+            }
+
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(key).then(() => {
+                    $('#copyModal').modal('show'); 
+                }).catch(err => {
+                    console.error('Failed to copy key: ', err);
+                    fallbackCopyTextToClipboard(key);
+                });
+            } else {
+                console.warn('Clipboard API not supported, using fallback method');
+                fallbackCopyTextToClipboard(key);
+            }
+        }
+
+        function fallbackCopyTextToClipboard(text) {
+            const textArea = document.createElement('textarea');
+            textArea.value = text;
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            try {
+                const successful = document.execCommand('copy');
+                const msg = successful ? 'successful' : 'unsuccessful';
+                console.log('Fallback: Copying text command was ' + msg);
+                $('#copyModal').modal('show'); 
+            } catch (err) {
+                console.error('Fallback: Oops, unable to copy', err);
+            }
+            document.body.removeChild(textArea);
+        }
+
+</script>
+{% endblock %}
+
+{% block modals %}
+<div class="modal fade" id="copyModal" tabindex="-1" role="dialog" aria-labelledby="copyModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="copyModalLabel">Key Copied</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                The API key has been copied to your clipboard.
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

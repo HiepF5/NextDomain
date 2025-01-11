@@ -15,7 +15,8 @@ from .account import AccountUser
 from .domain_user import DomainUser
 from .domain_setting import DomainSetting
 from .history import History
-
+from datetime import datetime
+from sqlalchemy.sql import func
 
 class Domain(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -26,6 +27,12 @@ class Domain(db.Model):
     notified_serial = db.Column(db.BigInteger)
     last_check = db.Column(db.Integer)
     dnssec = db.Column(db.Integer)
+    is_user_created = db.Column(db.Integer)
+    is_domain_free = db.Column(db.Integer)
+    status = db.Column(db.String(255), default='Active')
+    create_at = db.Column(db.DateTime, server_default=db.func.now())
+    updated_at = db.Column(db.DateTime, onupdate=func.now())
+    update_time_deactive = db.Column(db.DateTime)
     account_id = db.Column(db.Integer, db.ForeignKey('account.id'))
     account = db.relationship("Account", back_populates="domains")
     settings = db.relationship('DomainSetting', back_populates='domain')
@@ -41,6 +48,9 @@ class Domain(db.Model):
                  serial=None,
                  notified_serial=None,
                  last_check=None,
+                 is_user_created=None,
+                 is_domain_free=None,
+                 status=None,
                  dnssec=None,
                  account_id=None):
         self.id = id
@@ -50,6 +60,9 @@ class Domain(db.Model):
         self.serial = serial
         self.notified_serial = notified_serial
         self.last_check = last_check
+        self.is_user_created = is_user_created
+        self.is_domain_free = is_domain_free
+        status = status
         self.dnssec = dnssec
         self.account_id = account_id
         # PDNS configs
@@ -153,6 +166,11 @@ class Domain(db.Model):
                 should_removed_db_domain = list(
                     set(list_db_domain).difference(list_jdomain))
                 for domain_name in should_removed_db_domain:
+                    domain = db.session.query(Domain).filter(Domain.name == domain_name).first()
+                    if domain:
+                        if domain.status == 'Pending' or domain.status == 'Deactive':
+                            current_app.logger.info(f"Domain {domain_name} has status 'Pending or Deactive', skipping deletion.")
+                            continue
                     self.delete_domain_from_pdnsadmin(domain_name, do_commit=False)
             except Exception as e:
                 current_app.logger.error(
@@ -181,7 +199,7 @@ class Domain(db.Model):
                     account_id = None
                 domain = dict_db_domain.get(data['name'].rstrip('.'), None)
                 if domain:
-                    self.update_pdns_admin_domain(domain, account_id, data, do_commit=False)
+                    self.update_pdns_admin_domain(domain, account_id, data, do_commit=False, is_user_created=domain.is_user_created, is_domain_free=domain.is_domain_free, status=domain.status)
                 else:
                     # add new domain
                     self.add_domain_to_powerdns_admin(domain=data, do_commit=False)
@@ -198,7 +216,7 @@ class Domain(db.Model):
                 'Cannot update zone table. Error: {0}'.format(e))
             return {'status': 'error', 'msg': 'Cannot update zone table'}
 
-    def update_pdns_admin_domain(self, domain, account_id, data, do_commit=True):
+    def update_pdns_admin_domain(self, domain, account_id, data, do_commit=True, is_user_created=0, is_domain_free=0, status='Active'):
         # existing domain, only update if something actually has changed
         if (domain.master != str(data['masters'])
                 or domain.type != data['kind']
@@ -215,6 +233,10 @@ class Domain(db.Model):
             domain.last_check = 1 if data['last_check'] else 0
             domain.dnssec = 1 if data['dnssec'] else 0
             domain.account_id = account_id
+            domain.updated_at = func.now()
+            
+            domain.is_user_created = is_user_created
+            domain.is_domain_free = is_domain_free
             try:
                 if do_commit:
                     db.session.commit()
@@ -230,6 +252,9 @@ class Domain(db.Model):
             domain_name,
             domain_type,
             soa_edit_api,
+            is_user_created,
+            is_domain_free,
+            status,
             domain_ns=[],
             domain_master_ips=[],
             account_name=None):
@@ -275,7 +300,7 @@ class Domain(db.Model):
                 current_app.logger.info(
                     'Added zone successfully to PowerDNS: {0}'.format(
                         domain_name))
-                self.add_domain_to_powerdns_admin(domain_dict=post_data)
+                self.add_domain_to_powerdns_admin(domain_dict=post_data, is_user_created = is_user_created, is_domain_free= is_domain_free, status = status)
                 return {'status': 'ok', 'msg': 'Added zone successfully'}
         except Exception as e:
             current_app.logger.error('Cannot add zone {0} {1}'.format(
@@ -283,7 +308,7 @@ class Domain(db.Model):
             current_app.logger.debug(traceback.format_exc())
             return {'status': 'error', 'msg': 'Cannot add this zone.'}
 
-    def add_domain_to_powerdns_admin(self, domain=None, domain_dict=None, do_commit=True):
+    def add_domain_to_powerdns_admin(self, domain=None, domain_dict=None, do_commit=True, is_user_created=0, is_domain_free=0, status='Active'):
         """
         Read zone from PowerDNS and add into PDNS-Admin
         """
@@ -320,6 +345,11 @@ class Domain(db.Model):
         d.last_check = domain['last_check']
         d.dnssec = 1 if domain['dnssec'] else 0
         d.account_id = account_id
+        d.is_user_created = is_user_created
+        d.is_domain_free = is_domain_free
+        d.status = status
+        d.create_at = func.now()
+        d.updated_at = func.now()
         db.session.add(d)
         try:
             if do_commit:
@@ -507,8 +537,17 @@ class Domain(db.Model):
         Delete a single zone name from powerdns
         """
         try:
-            self.delete_domain_from_powerdns(domain_name)
-            self.delete_domain_from_pdnsadmin(domain_name)
+            domain = Domain.query.filter_by(name=domain_name).first()
+            if domain:
+                if domain.status in ['Active', 'Default']:
+                    self.delete_domain_from_powerdns(domain_name)
+                    self.delete_domain_from_pdnsadmin(domain_name)
+                else:
+                    current_app.logger.info(f"Domain {domain_name} có trạng thái 'Pending', chỉ xóa từ pdnsadmin.")
+                    self.delete_domain_from_pdnsadmin(domain_name)
+                   
+            else:
+                current_app.logger.info(f"Domain {domain_name} không tồn tại trong bảng Domain, bỏ qua việc xóa.")
             return {'status': 'ok', 'msg': 'Delete zone successfully'}
         except Exception as e:
             current_app.logger.error(
@@ -944,3 +983,177 @@ class Domain(db.Model):
                                 return upper_domain_name
             upper_domain_name = '.'.join(upper_domain_name.split('.')[1:])
         return None
+    def add_personal_domain(self,
+        domain_name,
+        domain_type,
+        soa_edit_api,
+        is_user_created,
+        is_domain_free,
+        status,
+        domain_ns=[],
+        domain_master_ips=[],
+        account_name=None):
+        """
+        Update domain information directly into PowerDNS Admin without adding it to PowerDNS.
+        """
+        domain_name = domain_name + '.'
+        domain_ns = [ns + '.' for ns in domain_ns]
+
+        if soa_edit_api not in ["DEFAULT", "INCREASE", "EPOCH", "OFF"]:
+            soa_edit_api = 'DEFAULT'
+        elif soa_edit_api == 'OFF':
+            soa_edit_api = ''
+        
+        # Tạo dữ liệu cho zone mới
+        post_data = {
+            "name": domain_name,
+            "kind": domain_type,
+            "masters": domain_master_ips,
+            "nameservers": domain_ns,
+            "soa_edit_api": soa_edit_api,
+            "account": account_name
+        }
+
+        try:
+            # Cập nhật trực tiếp vào PowerDNS-Admin mà không gửi vào PowerDNS
+            self.add_powerdns_admin(domain_dict=post_data,
+                                            is_user_created=is_user_created,
+                                            is_domain_free=is_domain_free,
+                                            status=status)
+            return {'status': 'ok', 'msg': 'Domain successfully updated in PowerDNS-Admin'}
+        except Exception as e:
+            current_app.logger.error('Cannot update domain {0} {1}'.format(domain_name, e))
+            current_app.logger.debug(traceback.format_exc())
+            return {'status': 'error', 'msg': 'Cannot update this domain in PowerDNS-Admin.'}
+        
+    def add_powerdns_admin(self, domain_dict=None, do_commit=True, is_user_created=0, is_domain_free=0, status='Active'):
+        """
+        Update or add domain information directly into PowerDNS-Admin.
+        - If the domain already exists and its status is 'Pending', it will be added (updated).
+        - If the domain status is 'Active', no update will be made and the existing domain is returned.
+        """
+        # Kiểm tra xem domain_dict có dữ liệu không, nếu không thì return lỗi
+        if not domain_dict:
+            return {'status': 'error', 'msg': 'Invalid domain data'}
+
+        # Kiểm tra xem domain có tồn tại trong PowerDNS-Admin chưa
+        existing_domain = db.session.query(Domain).filter(Domain.name == domain_dict['name'].rstrip('.')).first()
+
+        if existing_domain:
+            if existing_domain.status == 'Active':
+                # Nếu domain đang Active, không làm gì và trả về thông báo
+                return {'status': 'ok', 'msg': f'Domain {existing_domain.name} is already Active, no update needed'}
+
+            if existing_domain.status == 'Pending':
+                # Nếu domain đang Pending, cập nhật thông tin và giữ lại trạng thái Pending
+                existing_domain.master = str(domain_dict['masters'])
+                existing_domain.type = domain_dict['kind']
+                existing_domain.serial = domain_dict.get('serial', existing_domain.serial)
+                existing_domain.notified_serial = domain_dict.get('notified_serial', existing_domain.notified_serial)
+                existing_domain.last_check = domain_dict.get('last_check', existing_domain.last_check)
+                existing_domain.dnssec = 1 if domain_dict.get('dnssec', False) else 0
+                existing_domain.account_id = Account().get_id_by_name(domain_dict['account']) if domain_dict.get('account') else existing_domain.account_id
+                existing_domain.is_user_created = is_user_created
+                existing_domain.is_domain_free = is_domain_free
+                existing_domain.status = 'Pending'  # Giữ nguyên trạng thái Pending
+                existing_domain.updated_at = func.now()  # Cập nhật thời gian chỉnh sửa
+
+                try:
+                    if do_commit:
+                        db.session.commit()
+                    current_app.logger.info("Updated domain in PowerDNS-Admin: {0}".format(existing_domain.name))
+                    return {'status': 'ok', 'msg': 'Domain successfully updated to Pending in PowerDNS-Admin'}
+                except Exception as e:
+                    db.session.rollback()
+                    current_app.logger.error("Rolled back updating domain {0}".format(existing_domain.name))
+                    raise e
+            else:
+                # Nếu trạng thái không phải 'Active' hay 'Pending', có thể xử lý lỗi khác ở đây
+                return {'status': 'error', 'msg': f'Domain {existing_domain.name} has an invalid status: {existing_domain.status}'}
+
+        else:
+            # Nếu domain không tồn tại, thêm mới domain
+            try:
+                d = Domain()
+                d.name = domain_dict['name'].rstrip('.')  # lgtm [py/modification-of-default-value]
+                d.master = str(domain_dict['masters'])
+                d.type = domain_dict['kind']
+                d.serial = None
+                d.notified_serial = None
+                d.last_check = None
+                d.dnssec = None
+                d.account_id=Account().get_id_by_name(domain_dict['account']) if domain_dict.get('account') else None,
+                d.is_user_created = is_user_created
+                d.is_domain_free = is_domain_free
+                d.status = status
+                d.update_time_deactive = func.now()
+                d.create_at = func.now()
+                d.updated_at = func.now()
+                db.session.add(d)
+                if do_commit:
+                    db.session.commit()
+                current_app.logger.info("Added new domain to PowerDNS-Admin: {0}".format(d.name))
+                return {'status': 'ok', 'msg': 'New domain successfully added to PowerDNS-Admin as Pending'}
+            except Exception as e:
+                db.session.rollback()
+                current_app.logger.error("Rolled back adding new domain {0}".format(domain_dict['name']))
+                raise e
+
+    def add_powerdns(self,
+                domain_name,
+                domain_type,
+                soa_edit_api,
+                is_user_created,
+                is_domain_free,
+                status,
+                domain_ns=[],
+                domain_master_ips=[],
+                account_name=None):
+            """
+            Add a zone to power dns
+            """
+
+            headers = {'X-API-Key': self.PDNS_API_KEY, 'Content-Type': 'application/json'}
+
+            domain_name = domain_name + '.'
+            domain_ns = [ns + '.' for ns in domain_ns]
+
+            if soa_edit_api not in ["DEFAULT", "INCREASE", "EPOCH", "OFF"]:
+                soa_edit_api = 'DEFAULT'
+
+            elif soa_edit_api == 'OFF':
+                soa_edit_api = ''
+
+            post_data = {
+                "name": domain_name,
+                "kind": domain_type,
+                "masters": domain_master_ips,
+                "nameservers": domain_ns,
+                "soa_edit_api": soa_edit_api,
+                "account": account_name
+            }
+
+            try:
+                jdata = utils.fetch_json(
+                    urljoin(self.PDNS_STATS_URL,
+                            self.API_EXTENDED_URL + '/servers/localhost/zones'),
+                    headers=headers,
+                    timeout=int(Setting().get('pdns_api_timeout')),
+                    method='POST',
+                    verify=Setting().get('verify_ssl_connections'),
+                    data=post_data)
+                if 'error' in jdata.keys():
+                    current_app.logger.error(jdata['error'])
+                    if jdata.get('http_code') == 409:
+                        return {'status': 'error', 'msg': 'Zone already exists'}
+                    return {'status': 'error', 'msg': jdata['error']}
+                else:
+                    current_app.logger.info(
+                        'Added zone successfully to PowerDNS: {0}'.format(
+                            domain_name))
+                    return {'status': 'ok', 'msg': 'Added zone successfully'}
+            except Exception as e:
+                current_app.logger.error('Cannot add zone {0} {1}'.format(
+                    domain_name, e))
+                current_app.logger.debug(traceback.format_exc())
+                return {'status': 'error', 'msg': 'Cannot add this zone.'}
